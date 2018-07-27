@@ -23,8 +23,9 @@ type Config interface {
 	// get all values
 	Values() []interface{}
 
-	// convert the config to map, the change on map will not impact the original config
-	ToMap() map[string]interface{}
+	// return a resolved config, all inner references will be resolved after this call
+	// error out if any reference is not resolvable
+	Resolve() (ResolvedConfig, error)
 
 	// get and cast the value as config, useful for nested/structured key value settings
 	// note the change on sub-config should be reflected to the parent
@@ -39,14 +40,22 @@ type Config interface {
 	Reference() bool
 }
 
-// reference to a remote config
-type ReferenceConfig interface {
+// resolved config is a complete self-contained config
+// any reference config will be resolved to be local
+type ResolvedConfig interface {
 	Config
 
-	// convert the reference config to local config, it is convenient for
-	// user to replace the reference with local config
-	ToLocal() Config
+	ToMap() map[string]interface{}
 }
+
+//// reference to a remote config
+//type ReferenceConfig interface {
+//	Config
+//
+//	// convert the reference config to local config, it is convenient for
+//	// user to replace the reference with local config
+//	ToLocal() Config
+//}
 
 var (
 	ErrConfigNotExists = errors.New("config not exists")
