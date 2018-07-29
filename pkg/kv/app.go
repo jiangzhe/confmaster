@@ -1,14 +1,13 @@
-package app
+package kv
 
 import (
-	"confmaster/pkg/kv"
 	"confmaster/pkg/template"
 )
 
 // app is an application that contains one configuration backed by single kvstore
 type App interface {
 
-	Configs() kv.SnapshotStore
+	Configs() SnapshotStore
 
 	Templates() template.SnapshotStore
 

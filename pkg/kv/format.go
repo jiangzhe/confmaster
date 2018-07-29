@@ -48,7 +48,9 @@ func formatProperties(path []byte, value interface{}, writer io.Writer) error {
 	m, ok := value.(map[string]interface{})
 	if ok {
 		for k, v := range m {
-			p := append(path, '.')
+			p := make([]byte, 0, len(path) + len(k) + 1)
+			p = append(p, []byte(path)...)
+			p = append(p, '.')
 			p = append(p, []byte(k)...)
 			if err := formatProperties(p, v, writer); err != nil {
 				return err
