@@ -27,7 +27,7 @@ type Snapshot interface {
 	SCN() SCN
 
 	// the store of kvs
-	Config() ConfigWritable
+	Config() ConfigInterface
 
 	// commit the change of kvs, error if conflict with version
 	Commit() error

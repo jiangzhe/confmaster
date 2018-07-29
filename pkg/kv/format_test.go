@@ -12,19 +12,11 @@ var (
 		"ask": 123,
 		"friends": []string{"john", "alice", "allen"},
 	}
-	ref = &Reference{
-		Namespace: "default",
-		Labels: map[string]string{"project":"demo","cluster":"1","app":"nginx"},
-		Path: "",
-	}
-	ic1 = &readableConfig{
-		path: "",
-		ref: &Reference{
-			Namespace: "default",
-			Labels: map[string]string{"cluster":"1","app":"nginx"},
-			Path: "",
-		},
-	}
+	//ref = &Reference{
+	//	Namespace: "default",
+	//	Labels: map[string]string{"project":"demo","cluster":"1","app":"nginx"},
+	//	Path: "",
+	//}
 )
 
 func TestJSON(t *testing.T) {
@@ -36,14 +28,14 @@ func TestJSON(t *testing.T) {
 	t.Logf("\n" + string(bs))
 }
 
-func TestJSONReference(t *testing.T) {
-	bs, err := json.MarshalIndent(ref, "", "  ")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	t.Logf("\n" + string(bs))
-}
+//func TestJSONReference(t *testing.T) {
+//	bs, err := json.MarshalIndent(ref, "", "  ")
+//	if err != nil {
+//		t.Error(err)
+//		return
+//	}
+//	t.Logf("\n" + string(bs))
+//}
 
 func TestYAML(t *testing.T) {
 	bs, err := yaml.Marshal(kv1)

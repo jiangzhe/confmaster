@@ -3,77 +3,62 @@ package kv
 import (
 	"testing"
 	"encoding/json"
-	"reflect"
+	"bytes"
+	"fmt"
 )
 
 func TestConfigRefFromJson(t *testing.T) {
+
+}
+
+func TestJsonUnmarshal(t *testing.T) {
+	m1 := make(map[string]interface{})
 	json1 := []byte(`
 {
-  "remote": {
-    "$ref": {
-      "namespace": "default",
-      "labels": {
-        "cluster": "1",
-        "app": "nginx"
-      },
-      "path": "export.config"
-    }
-  },
-  "remote.a": "A"
+  "a": {"b": 123},
+  "a": {"c": 456}
 }
 `)
-	m1 := make(map[string]interface{})
-	json.Unmarshal(json1, &m1)
-
-	c := NewReadableConfig("", m1)
-
-	_, err := c.Shrink()
+	err := json.Unmarshal(json1, &m1)
 	if err != nil {
 		t.Logf("expected error: %v", err)
 	} else {
-		t.Error("path conflict not detected")
+		t.Errorf("unmarshal error expected but not occur: %v", m1)
 	}
 
-	rc, _ := c.GetConfig("remote")
-	t.Logf("getconfig(remote), %v", rc)
-	if rc.Reference() == nil {
-		t.Error("reference miss")
-	}
 }
 
-func TestConfigRead(t *testing.T) {
-	m := make(map[string]interface{})
+func TestConfigObject(t *testing.T) {
+	co := NewConfigObject()
+	co.setInt("n", 100)
+	t.Logf(displayConfigObject(co))
+	co.setString("a.b", "hello, world")
+	t.Logf(displayConfigObject(co))
+	co.setReference("a", NewConfigReference(map[string]string{"cluster":"1", "app":"nginx"}, "consumer.config"))
+	t.Logf(displayConfigObject(co))
+}
 
-	sm := make(map[string]interface{})
-	sm["c"] = "C"
-	sm["d"] = "D"
+func displayConfigObject(co *ConfigObject) string {
+	buf := bytes.Buffer{}
+	writeConfigObject(co, &buf)
+	return buf.String()
+}
 
-	m["a"] = "A"
-	m["b"] = sm
-
-	c := NewReadableConfig("app", m)
-	t.Logf("path: %v", c.Path())
-	if c.Path() != "app" {
-		t.Error("path mismatch")
-	}
-	va, _ := c.Get("a")
-	t.Logf("get(a): %v", va)
-	if !reflect.DeepEqual(va, "A") {
-		t.Error("get mismatch")
-	}
-	vb, _ := c.Get("b")
-	t.Logf("get(b): %v", vb)
-	if !reflect.DeepEqual(vb,  sm) {
-		t.Error("get complex mismatch")
+func writeConfigObject(co *ConfigObject, buf *bytes.Buffer) string {
+	buf.WriteByte('\n')
+	if len(co.refs) == 0 {
+		buf.WriteString("refs: <nil>\n")
+	} else {
+		buf.WriteString(fmt.Sprintf("refs: %v\n", co.refs))
 	}
 
-	cb, _ := c.GetConfig("b")
-	t.Logf("getconfig(b): %v", cb)
-	vd, _ := cb.Get("d")
-	t.Logf("get(d): %v", vd)
-	if !reflect.DeepEqual(vd, "D") {
-		t.Error("get value from sub config mismatch")
+	if len(*co.m) == 0 {
+		buf.WriteString("m: <nil>\n")
+	} else {
+		buf.WriteString("m: \n")
+		for k, v := range *co.m {
+			buf.WriteString(fmt.Sprintf("%v -> {type=%v value=%v}\n", k, v.Type, v.RefValue))
+		}
 	}
-
-
+	return buf.String()
 }

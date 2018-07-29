@@ -15,7 +15,7 @@ type Definition struct {
 	Description string `json:"description,omitempty"`
 	Options []intstr.IntOrString `json:"options,omitempty"`
 	Range *ValueRange `json:"range,omitempty"`
-	Ref *Reference `json:"ref,omitempty"`
+	Ref *ConfigReference `json:"ref,omitempty"`
 }
 
 var (
