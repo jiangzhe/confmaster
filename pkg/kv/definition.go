@@ -23,12 +23,12 @@ var (
 )
 
 type ValueRange struct {
-	min float64
-	max float64
+	Min float64 `json:"min"`
+	Max float64 `json:"max"`
 }
 
 func (vr *ValueRange) MarshalJSON() ([]byte, error) {
-	arr := []float64{vr.min, vr.max}
+	arr := []float64{vr.Min, vr.Max}
 	return json.Marshal(arr)
 }
 
@@ -44,8 +44,8 @@ func (vr *ValueRange) UnmarshalJSON(data []byte) error {
 	if len(arr) != 2 {
 		return ErrParseValueRange
 	}
-	vr.min = arr[0]
-	vr.max = arr[1]
+	vr.Min = arr[0]
+	vr.Max = arr[1]
 	return nil
 }
 

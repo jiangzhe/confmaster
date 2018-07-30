@@ -2,12 +2,27 @@ package kv
 
 import (
 	"errors"
+	"confmaster/pkg/template"
 )
 
 var (
 	ErrMultipleApps = errors.New("multiple app found")
 	ErrAppNotExists = errors.New("app not exists")
 )
+
+// app is an application that contains one configuration backed by single kvstore
+type App interface {
+
+	Configs() SnapshotStore
+
+	Templates() template.SnapshotStore
+
+	Labels() Labels
+
+	Attributes() Attributes
+
+	Engine() template.Engine
+}
 
 // AppLabels are associated to an app, and can be part of search patterns
 // the labels are immutable during whole app lifecycle,

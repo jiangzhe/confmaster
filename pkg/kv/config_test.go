@@ -50,7 +50,7 @@ func TestDotJson(t *testing.T) {
 
 func TestConfigObject(t *testing.T) {
 	co := NewConfigObject()
-	co.setInt("n", 100)
+	co.setNumber("n", 100)
 	t.Logf(displayConfigObject(co))
 	co.setString("a.b", "hello, world")
 	t.Logf(displayConfigObject(co))
