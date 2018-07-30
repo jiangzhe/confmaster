@@ -1,5 +1,10 @@
 package kv
 
+import (
+	"fmt"
+	"encoding/json"
+)
+
 type ValueType int
 
 const (
@@ -11,16 +16,48 @@ const (
 	FallbackType
 )
 
+func (vt *ValueType) MarshalJSON() ([]byte, error) {
+	switch *vt {
+	case StringType:
+		return []byte("string"), nil
+	case ReferenceType:
+		return []byte("reference"), nil
+	case NumericType:
+		return []byte("number"), nil
+	case ObjectType:
+		return []byte("object"), nil
+	case ArrayType:
+		return []byte("array"), nil
+	case FallbackType:
+		return []byte("fallback"), nil
+	}
+	return nil, fmt.Errorf("unknown value type %v", *vt)
+}
+
+func (vt *ValueType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, s)
+	if err != nil {
+		return err
+	}
+	switch s {
+	case "string": *vt = StringType
+	case "reference": *vt = ReferenceType
+	case "number": *vt = NumericType
+	case "object": *vt = ObjectType
+	case "array": *vt = ArrayType
+	case "fallback": *vt = FallbackType
+	default: return fmt.Errorf("invalid value type to decode: %v", s)
+	}
+	return nil
+}
+
 type Value struct {
 	Type     ValueType
 	RefValue interface{}
 }
 
-func (v *Value) cloneFrom(that *Value) {
-	v.RefValue = that.RefValue
-	v.Type = that.Type
-}
-
+// clone a new value and return the pointer
 func (v *Value) Clone() *Value {
 	var ref interface{}
 	switch v.Type {
@@ -30,7 +67,10 @@ func (v *Value) Clone() *Value {
 		ref = v.RefValue.(*ConfigArray).Clone()
 	case ReferenceType:
 		ref = v.RefValue.(*ConfigReference).Clone()
+	case FallbackType:
+		ref = v.RefValue.(*ConfigFallback).Clone()
 	case StringType:
+		fallthrough
 	case NumericType:
 		ref = v.RefValue
 	}
@@ -40,6 +80,45 @@ func (v *Value) Clone() *Value {
 	}
 }
 
+// unwrap and return the inner value
+func (v *Value) Unwrap() interface{} {
+	switch v.Type {
+	case ObjectType:
+		co := v.RefValue.(*ConfigObject)
+		m := make(map[string]interface{})
+		for k, v := range *co.m {
+			m[k] = v.Unwrap()
+		}
+		return m
+	case ArrayType:
+		ca := v.RefValue.(*ConfigArray)
+		arr := make([]interface{}, 0, len(ca.arr))
+		for _, elem := range ca.arr {
+			arr = append(arr, elem)
+		}
+		return arr
+	case ReferenceType:
+		cr := v.RefValue.(*ConfigReference)
+		m := make(map[string]interface{})
+		m["labels"]= cr.Labels
+		m["path"] = cr.Path
+		return m
+	case FallbackType:
+		// should not happen
+		m := make(map[string]interface{})
+		return m
+	case StringType:
+		fallthrough
+	case NumericType:
+		return v.RefValue
+	}
+	return nil
+}
+
+// value setter is an internal interface to modify the inner value
+// it is only for internal usage,
+// if user does not call these methods, the ConfigInterface can be
+// treated as immutable
 type valueSetter interface {
 	setString(name string, value string)
 	setInt(name string, value int)
@@ -47,6 +126,7 @@ type valueSetter interface {
 	setArray(name string, value *ConfigArray)
 	setReference(name string, value *ConfigReference)
 	setValue(path string, t ValueType, ref interface{})
+	unset(path string)
 }
 
 func MakeStringValue(src string) *Value {
@@ -84,7 +164,8 @@ func MakeReferenceValue(src *ConfigReference) *Value {
 	}
 }
 
-func MakeFallbackValue(src *ConfigFallback) *Value {
+// fallback value will not be used
+func makeFallbackValue(src *ConfigFallback) *Value {
 	return &Value{
 		Type:     FallbackType,
 		RefValue: src,

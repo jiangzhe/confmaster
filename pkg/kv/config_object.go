@@ -9,8 +9,8 @@ type ConfigObject struct {
 
 // given a path, traverse and assign config object until the last path,
 // return the final config object and key
+// this method changes the underlying map
 func (co *ConfigObject) resolveKey(path string) (*ConfigObject, string) {
-	//prefix, key := pathPrefix(splitPath(path))
 	obj := co
 	paths := strings.Split(path, ".")
 	if len(paths) == 1 {
@@ -24,6 +24,23 @@ func (co *ConfigObject) resolveKey(path string) (*ConfigObject, string) {
 			(*obj.m)[p] = v
 		}
 		obj = v.RefValue.(*ConfigObject)
+	}
+	return obj, paths[len(paths)-1]
+}
+
+// given a path, traverse and find the key until last path,
+// immediately return nil if key is not found
+func (co *ConfigObject) findKey(path string) (*ConfigObject, string) {
+	obj := co
+	paths := strings.Split(path, ".")
+	if len(paths) == 1 {
+		return obj, path
+	}
+	for _, p := range paths[:len(paths)-1] {
+		v, _ := (*obj.m)[p]
+		if v == nil || v.Type != ObjectType {
+			return nil, p
+		}
 	}
 	return obj, paths[len(paths)-1]
 }
@@ -114,6 +131,13 @@ func (co *ConfigObject) setArray(path string, value *ConfigArray) {
 
 func (co *ConfigObject) setReference(path string, value *ConfigReference) {
 	co.setValue(path, ReferenceType, value)
+}
+
+func (co *ConfigObject) unset(path string) {
+	obj, key := co.findKey(path)
+	if obj != nil {
+		delete(*obj.m, key)
+	}
 }
 
 func (co *ConfigObject) GetValue(path string) (res *Value) {

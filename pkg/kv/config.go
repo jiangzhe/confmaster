@@ -16,12 +16,6 @@ type ConfigInterface interface {
 	WithFallback(fallback ConfigInterface) ConfigInterface
 }
 
-type ResolvedConfigInterface interface {
-	ConfigInterface
-
-	ToMap() map[string]interface{}
-}
-
 var (
 	ErrConfigNotExists = errors.New("config not exists")
 	ErrConfigChangeNotAllowed = errors.New("config change not allowed")
@@ -29,9 +23,3 @@ var (
 	ErrValueReferenceConflict = errors.New("value reference conflict")
 	ErrValuePathConflict = errors.New("value path conflict")
 )
-
-type Resolver interface {
-	// return a resolved config, all inner references will be resolved after this call
-	// error out if any reference is not resolvable
-	Resolve(ConfigInterface) (ResolvedConfigInterface, error)
-}

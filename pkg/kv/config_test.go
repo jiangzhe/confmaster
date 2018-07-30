@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"bytes"
 	"fmt"
+	"gopkg.in/yaml.v2"
 )
 
 func TestConfigRefFromJson(t *testing.T) {
@@ -19,14 +20,33 @@ func TestJsonUnmarshal(t *testing.T) {
   "a": {"c": 456}
 }
 `)
-	err := json.Unmarshal(json1, &m1)
-	if err != nil {
-		t.Logf("expected error: %v", err)
-	} else {
-		t.Errorf("unmarshal error expected but not occur: %v", m1)
-	}
-
+	json.Unmarshal(json1, &m1)
+	t.Logf("result: %v", m1)
 }
+
+func TestYamlUnmarshal(t *testing.T) {
+	m1 := make(map[string]interface{})
+
+	yaml1 := []byte(`
+a:
+  b: 123
+
+a:
+  c: 456
+
+a.d: 789
+`)
+	yaml.Unmarshal(yaml1, &m1)
+	t.Logf("result: %v", m1)
+}
+
+func TestDotJson(t *testing.T) {
+	json1 := []byte(`{"hello.world":"perfect"}`)
+	m1 := make(map[string]interface{})
+	json.Unmarshal(json1, &m1)
+	t.Logf("result: %v", m1)
+}
+
 
 func TestConfigObject(t *testing.T) {
 	co := NewConfigObject()
@@ -62,3 +82,25 @@ func writeConfigObject(co *ConfigObject, buf *bytes.Buffer) string {
 	}
 	return buf.String()
 }
+
+func TestConfigOverwritePath(t *testing.T) {
+	co := NewConfigObject()
+	co.setString("a", "A")
+	co.setString("a.b", "B")
+	vb := co.GetValue("a.b")
+	if vb == nil {
+		t.Error("vb is not expected as nil")
+		return
+	}
+	if vb.Type != StringType {
+		t.Errorf("vb has invalid type %v", vb.Type)
+		return
+	}
+
+	va := co.GetObject("a")
+	if va == nil {
+		t.Error("va is not expected as nil")
+		return
+	}
+}
+

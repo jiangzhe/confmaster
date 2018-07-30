@@ -11,7 +11,7 @@ import (
 type Definition struct {
 	// path is a dot delimited string indicate the hierarchy of current config
 	Path string `json:"path"`
-	Type string `json:"type"`
+	Type *ValueType `json:"type"`
 	Description string `json:"description,omitempty"`
 	Options []intstr.IntOrString `json:"options,omitempty"`
 	Range *ValueRange `json:"range,omitempty"`

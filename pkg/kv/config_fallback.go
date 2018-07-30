@@ -112,6 +112,27 @@ func (cf *ConfigFallback) WithFallback(fallback ConfigInterface) ConfigInterface
 	return cf
 }
 
+func (cf *ConfigFallback) Clone() *ConfigFallback {
+	var current ConfigInterface
+	var fallback ConfigInterface
+	switch cf.current.(type) {
+	case *ConfigObject:
+		current = cf.current.(*ConfigObject).Clone()
+	case *ConfigFallback:
+		current = cf.current.(*ConfigFallback).Clone()
+	}
+	switch cf.fallback.(type) {
+	case *ConfigObject:
+		fallback = cf.fallback.(*ConfigObject).Clone()
+	case *ConfigFallback:
+		fallback = cf.fallback.(*ConfigFallback).Clone()
+	}
+	return &ConfigFallback{
+		current: current,
+		fallback: fallback,
+	}
+}
+
 func (cf *ConfigFallback) withFallbackObject(fallback *ConfigObject) ConfigInterface {
 	switch cf.fallback.(type) {
 	case *ConfigObject:
