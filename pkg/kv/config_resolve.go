@@ -31,7 +31,7 @@ func (rco *ResolvedConfigObject) ToConfig() ConfigInterface {
 func (rco *ResolvedConfigObject) ToMap() map[string]interface{} {
 	m := make(map[string]interface{})
 	for k, v := range *rco.m {
-		m[k] = v.Clone()
+		m[k] = v.Unwrap()
 	}
 	return m
 }

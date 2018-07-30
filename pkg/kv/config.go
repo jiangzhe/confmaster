@@ -7,7 +7,7 @@ import (
 type ConfigInterface interface {
 	GetValue(path string) *Value
 	GetString(path string) string
-	GetInt(path string) int
+	GetNumber(path string) float64
 	GetObject(path string) *ConfigObject
 	GetArray(path string) *ConfigArray
 	GetReference(path string) *ConfigReference

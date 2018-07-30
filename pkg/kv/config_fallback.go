@@ -34,11 +34,11 @@ func (cf *ConfigFallback) GetString(path string) string {
 	return ""
 }
 
-func (cf *ConfigFallback) GetInt(path string) int {
+func (cf *ConfigFallback) GetNumber(path string) float64 {
 	if v := cf.GetValue(path); v != nil {
 		switch v.Type {
 		case NumericType:
-			return v.RefValue.(int)
+			return v.RefValue.(float64)
 		}
 	}
 	return 0

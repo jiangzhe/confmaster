@@ -85,7 +85,7 @@ func (co *ConfigObject) setString(path string, value string) {
 	co.setValue(path, StringType, value)
 }
 
-func (co *ConfigObject) setInt(path string, value int) {
+func (co *ConfigObject) setNumber(path string, value float64) {
 	co.setValue(path, NumericType, value)
 }
 
@@ -161,12 +161,12 @@ func (co *ConfigObject) GetString(path string) (res string) {
 	return
 }
 
-func (co *ConfigObject) GetInt(path string) (res int) {
+func (co *ConfigObject) GetNumber(path string) (res float64) {
 	if obj, key := traversePath(co, path); obj != nil {
 		if v, ok := (*obj.m)[key]; ok {
 			switch v.Type {
 			case NumericType:
-				res = v.RefValue.(int)
+				res = v.RefValue.(float64)
 			}
 		}
 	}

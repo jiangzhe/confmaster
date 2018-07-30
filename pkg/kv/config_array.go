@@ -8,7 +8,7 @@ func (ca *ConfigArray) addString(value string) {
 	ca.arr = append(ca.arr, MakeStringValue(value))
 }
 
-func (ca *ConfigArray) addInt(value int) {
+func (ca *ConfigArray) addNumber(value float64) {
 	ca.arr = append(ca.arr, MakeNumericValue(value))
 }
 

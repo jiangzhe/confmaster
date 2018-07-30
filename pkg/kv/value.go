@@ -19,17 +19,17 @@ const (
 func (vt *ValueType) MarshalJSON() ([]byte, error) {
 	switch *vt {
 	case StringType:
-		return []byte("string"), nil
+		return []byte(`"string"`), nil
 	case ReferenceType:
-		return []byte("reference"), nil
+		return []byte(`"reference"`), nil
 	case NumericType:
-		return []byte("number"), nil
+		return []byte(`"number"`), nil
 	case ObjectType:
-		return []byte("object"), nil
+		return []byte(`"object"`), nil
 	case ArrayType:
-		return []byte("array"), nil
+		return []byte(`"array"`), nil
 	case FallbackType:
-		return []byte("fallback"), nil
+		return []byte(`"fallback"`), nil
 	}
 	return nil, fmt.Errorf("unknown value type %v", *vt)
 }
@@ -94,7 +94,7 @@ func (v *Value) Unwrap() interface{} {
 		ca := v.RefValue.(*ConfigArray)
 		arr := make([]interface{}, 0, len(ca.arr))
 		for _, elem := range ca.arr {
-			arr = append(arr, elem)
+			arr = append(arr, elem.Unwrap())
 		}
 		return arr
 	case ReferenceType:
@@ -121,7 +121,7 @@ func (v *Value) Unwrap() interface{} {
 // treated as immutable
 type valueSetter interface {
 	setString(name string, value string)
-	setInt(name string, value int)
+	setNumber(name string, value float64)
 	setObject(name string, value *ConfigObject)
 	setArray(name string, value *ConfigArray)
 	setReference(name string, value *ConfigReference)
@@ -136,7 +136,7 @@ func MakeStringValue(src string) *Value {
 	}
 }
 
-func MakeNumericValue(src int) *Value {
+func MakeNumericValue(src float64) *Value {
 	return &Value{
 		Type:     NumericType,
 		RefValue: src,
