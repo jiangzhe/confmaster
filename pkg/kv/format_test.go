@@ -36,13 +36,13 @@ func TestYAML(t *testing.T) {
 
 func mockConfigObject() ResolvedConfigInterface {
 	co := NewConfigObject()
-	co.setNumber("a", 1)
+	co.setNumber("a", Int64Number(1))
 	co.setString("b", "B")
 
 	ca := NewConfigArray()
-	ca.addNumber(1)
-	ca.addNumber(2)
-	ca.addNumber(3)
+	ca.addInt(1)
+	ca.addInt(2)
+	ca.addInt(3)
 
 	co.setArray("c.d", ca)
 	mr := &mockResolver{}

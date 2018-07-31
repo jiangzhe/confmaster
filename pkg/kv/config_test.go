@@ -50,7 +50,7 @@ func TestDotJson(t *testing.T) {
 
 func TestConfigObject(t *testing.T) {
 	co := NewConfigObject()
-	co.setNumber("n", 100)
+	co.setNumber("n", Int64Number(100))
 	t.Logf(displayConfigObject(co))
 	co.setString("a.b", "hello, world")
 	t.Logf(displayConfigObject(co))
@@ -104,3 +104,24 @@ func TestConfigOverwritePath(t *testing.T) {
 	}
 }
 
+func TestMapFromJson(t *testing.T) {
+	m, err := mapFromJson([]byte(`{"a":"A", "b":123, "c.d":{}, "e":null, "f":[1, true, null], "g":true}`))
+	if err != nil {
+		t.Errorf("json unmarshal error: %v", err)
+	}
+	t.Logf("map result: %v", m)
+	t.Logf("type b: %T", m["b"])
+
+	for k, v := range m {
+		t.Logf("k=%v, v=%v, v.type=%T", k, v, v)
+	}
+}
+
+func TestNumberClone(t *testing.T) {
+	i1 := Int64Number(100)
+	i2 := i1.Clone()
+	t.Logf("%p %p", i1, i2)
+	*i1 = *Int64Number(200)
+	t.Logf("%p %p", i1, i2)
+	t.Logf("%v %v", i1, i2)
+}

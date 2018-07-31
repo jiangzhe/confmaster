@@ -4,6 +4,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"encoding/json"
 	"errors"
+	"bytes"
 )
 
 // definition is the metadata of a configuration for user
@@ -23,12 +24,12 @@ var (
 )
 
 type ValueRange struct {
-	Min float64 `json:"min"`
-	Max float64 `json:"max"`
+	Min Number `json:"min"`
+	Max Number `json:"max"`
 }
 
 func (vr *ValueRange) MarshalJSON() ([]byte, error) {
-	arr := []float64{vr.Min, vr.Max}
+	arr := []Number{vr.Min, vr.Max}
 	return json.Marshal(arr)
 }
 
@@ -36,8 +37,11 @@ func (vr *ValueRange) UnmarshalJSON(data []byte) error {
 	if len(data) < 0 {
 		return ErrParseValueRange
 	}
-	arr := make([]float64, 0)
-	err := json.Unmarshal(data, &arr)
+	buf := bytes.NewBuffer(data)
+	arr := make([]Number, 0)
+	decoder := json.NewDecoder(buf)
+	decoder.UseNumber()
+	err := decoder.Decode(&arr)
 	if err != nil {
 		return ErrParseValueRange
 	}

@@ -1,32 +1,19 @@
 package kv
 
-import "strings"
+import (
+	"strings"
+	"errors"
+)
 
 type ConfigObject struct {
 	m *map[string]*Value
 	refs map[string]*ConfigReference
 }
 
-// given a path, traverse and assign config object until the last path,
-// return the final config object and key
-// this method changes the underlying map
-func (co *ConfigObject) resolveKey(path string) (*ConfigObject, string) {
-	obj := co
-	paths := strings.Split(path, ".")
-	if len(paths) == 1 {
-		return obj, path
-	}
-	for _, p := range paths[:len(paths)-1] {
-		v, _ := (*obj.m)[p]
-		if v == nil || v.Type != ObjectType {
-			newco := NewConfigObject()
-			v = MakeObjectValue(newco)
-			(*obj.m)[p] = v
-		}
-		obj = v.RefValue.(*ConfigObject)
-	}
-	return obj, paths[len(paths)-1]
-}
+
+var (
+	ErrIndexOutOfBound = errors.New("key index out of bound")
+)
 
 // given a path, traverse and find the key until last path,
 // immediately return nil if key is not found
@@ -45,20 +32,7 @@ func (co *ConfigObject) findKey(path string) (*ConfigObject, string) {
 	return obj, paths[len(paths)-1]
 }
 
-func (co *ConfigObject) setValue(path string, vType ValueType, ref interface{}) {
-	obj, key := co.resolveKey(path)
-	(*obj.m)[key] = &Value{
-		Type:     vType,
-		RefValue: ref,
-	}
-	switch vType {
-	case ReferenceType:
-		co.addRef(path, ref.(*ConfigReference))
-	default:
-		co.removeRef(path)
-	}
-}
-
+// todo
 // recursively add ref
 func (co *ConfigObject) addRef(path string, ref *ConfigReference) {
 	prefixIdx := strings.Index(path, ".")
@@ -70,6 +44,7 @@ func (co *ConfigObject) addRef(path string, ref *ConfigReference) {
 	co.refs[path] = ref
 }
 
+// todo
 // recursively remove ref
 func (co *ConfigObject) removeRef(path string) {
 	prefixIdx := strings.Index(path, ".")
@@ -81,16 +56,17 @@ func (co *ConfigObject) removeRef(path string) {
 	delete(co.refs, path)
 }
 
-func (co *ConfigObject) setString(path string, value string) {
-	co.setValue(path, StringType, value)
+func (co *ConfigObject) setString(path string, value string) error {
+	return setValue(co, path, MakeStringValue(value))
 }
 
-func (co *ConfigObject) setNumber(path string, value float64) {
-	co.setValue(path, NumericType, value)
+func (co *ConfigObject) setNumber(path string, value *Number) error {
+	return setValue(co, path, makeNumericValue(value))
 }
 
+// todo
 // might have ref
-func (co *ConfigObject) setObject(path string, value *ConfigObject) {
+func (co *ConfigObject) setObject(path string, value *ConfigObject) error {
 	if obj := co.GetValue(path); obj != nil && obj.Type == ObjectType {
 		orig := obj.RefValue.(*ConfigObject)
 		for k, v := range *value.m {
@@ -98,7 +74,6 @@ func (co *ConfigObject) setObject(path string, value *ConfigObject) {
 				if obj.Type == v.Type {
 					switch obj.Type {
 					case ObjectType:
-						//obj.RefValue.(*ConfigObject).setObject(k, v.RefValue.(*ConfigObject))
 						co.setObject(path + "." + k, v.RefValue.(*ConfigObject))
 					case ArrayType:
 						array := obj.RefValue.(*ConfigArray)
@@ -112,32 +87,38 @@ func (co *ConfigObject) setObject(path string, value *ConfigObject) {
 					case FallbackType:
 						co.setValue(path + "." + k, v.Type, v.RefValue)
 					}
-				} else {
-					co.setValue(path + "." + k, ObjectType, value)
+				} else if err := co.setValue(path + "." + k, ObjectType, value); err != nil {
+					return err
 				}
-			} else {
-				co.setValue(path + "." + k, ObjectType, value)
+			} else if err := co.setValue(path + "." + k, ObjectType, value); err != nil {
+				return err
 			}
 		}
+		return nil
 	} else {
-		co.setValue(path, ObjectType, value)
-
+		return co.setValue(path, ObjectType, value)
 	}
 }
 
-func (co *ConfigObject) setArray(path string, value *ConfigArray) {
-	co.setValue(path, ArrayType, value)
+func (co *ConfigObject) setArray(path string, value *ConfigArray) error {
+	return setValue(co, path, MakeArrayValue(value))
 }
 
-func (co *ConfigObject) setReference(path string, value *ConfigReference) {
-	co.setValue(path, ReferenceType, value)
+func (co *ConfigObject) setReference(path string, value *ConfigReference) error {
+	return setValue(co, path, MakeReferenceValue(value))
 }
 
-func (co *ConfigObject) unset(path string) {
+func (co *ConfigObject) getValueByKey(key string) *Value {
+	return (*co.m)[key]
+}
+
+// todo
+func (co *ConfigObject) unset(path string) error {
 	obj, key := co.findKey(path)
 	if obj != nil {
 		delete(*obj.m, key)
 	}
+	return nil
 }
 
 func (co *ConfigObject) GetValue(path string) (res *Value) {
@@ -161,12 +142,12 @@ func (co *ConfigObject) GetString(path string) (res string) {
 	return
 }
 
-func (co *ConfigObject) GetNumber(path string) (res float64) {
+func (co *ConfigObject) GetNumber(path string) (res *Number) {
 	if obj, key := traversePath(co, path); obj != nil {
 		if v, ok := (*obj.m)[key]; ok {
 			switch v.Type {
 			case NumericType:
-				res = v.RefValue.(float64)
+				res = v.RefValue.(*Number)
 			}
 		}
 	}

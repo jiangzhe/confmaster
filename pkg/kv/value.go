@@ -3,6 +3,7 @@ package kv
 import (
 	"fmt"
 	"encoding/json"
+	"strconv"
 )
 
 type ValueType int
@@ -52,6 +53,113 @@ func (vt *ValueType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// refer to json.Number
+// A Number represents a JSON number literal.
+type Number string
+
+// create new number from int64
+func Int64Number(value int64) *Number {
+	n := Number(strconv.FormatInt(value, 10))
+	return &n
+}
+
+// create new number from float64
+func Float64Number(value float64) *Number {
+	n := Number(strconv.FormatFloat(value, 'f', -1, 64))
+	return &n
+}
+
+func FromJsonNumber(value json.Number) *Number {
+	n := Number(string(value))
+	return &n
+}
+
+func ToJsonNumber(value Number) json.Number {
+	return json.Number(string(value))
+}
+
+// String returns the literal text of the number.
+func (n *Number) String() string { return string(*n) }
+
+// Float64 returns the number as a float64.
+func (n *Number) Float64() (float64, error) {
+	return strconv.ParseFloat(string(*n), 64)
+}
+
+// Int64 returns the number as an int64.
+func (n *Number) Int64() (int64, error) {
+	return strconv.ParseInt(string(*n), 10, 64)
+}
+
+func (n *Number) Clone() *Number {
+	s := *n
+	return &s
+}
+
+// IsValidNumber reports whether s is a valid JSON number literal.
+func IsValidNumber(s string) bool {
+	// This function implements the JSON numbers grammar.
+	// See https://tools.ietf.org/html/rfc7159#section-6
+	// and http://json.org/number.gif
+
+	if s == "" {
+		return false
+	}
+
+	// Optional -
+	if s[0] == '-' {
+		s = s[1:]
+		if s == "" {
+			return false
+		}
+	}
+
+	// Digits
+	switch {
+	default:
+		return false
+
+	case s[0] == '0':
+		s = s[1:]
+
+	case '1' <= s[0] && s[0] <= '9':
+		s = s[1:]
+		for len(s) > 0 && '0' <= s[0] && s[0] <= '9' {
+			s = s[1:]
+		}
+	}
+
+	// . followed by 1 or more digits.
+	if len(s) >= 2 && s[0] == '.' && '0' <= s[1] && s[1] <= '9' {
+		s = s[2:]
+		for len(s) > 0 && '0' <= s[0] && s[0] <= '9' {
+			s = s[1:]
+		}
+	}
+
+	// e or E followed by an optional - or + and
+	// 1 or more digits.
+	if len(s) >= 2 && (s[0] == 'e' || s[0] == 'E') {
+		s = s[1:]
+		if s[0] == '+' || s[0] == '-' {
+			s = s[1:]
+			if s == "" {
+				return false
+			}
+		}
+		for len(s) > 0 && '0' <= s[0] && s[0] <= '9' {
+			s = s[1:]
+		}
+	}
+
+	// Make sure we are at the end.
+	return s == ""
+}
+
+func (n Number) MarshalJSON() ([]byte, error) {
+	return []byte(n), nil
+}
+
 type Value struct {
 	Type     ValueType
 	RefValue interface{}
@@ -69,9 +177,9 @@ func (v *Value) Clone() *Value {
 		ref = v.RefValue.(*ConfigReference).Clone()
 	case FallbackType:
 		ref = v.RefValue.(*ConfigFallback).Clone()
-	case StringType:
-		fallthrough
 	case NumericType:
+		ref = v.RefValue.(*Number).Clone()
+	case StringType:
 		ref = v.RefValue
 	}
 	return &Value{
@@ -107,27 +215,14 @@ func (v *Value) Unwrap() interface{} {
 		// should not happen
 		m := make(map[string]interface{})
 		return m
-	case StringType:
-		fallthrough
 	case NumericType:
+		return v.RefValue
+	case StringType:
 		return v.RefValue
 	}
 	return nil
 }
 
-// value setter is an internal interface to modify the inner value
-// it is only for internal usage,
-// if user does not call these methods, the ConfigInterface can be
-// treated as immutable
-type valueSetter interface {
-	setString(name string, value string)
-	setNumber(name string, value float64)
-	setObject(name string, value *ConfigObject)
-	setArray(name string, value *ConfigArray)
-	setReference(name string, value *ConfigReference)
-	setValue(path string, t ValueType, ref interface{})
-	unset(path string)
-}
 
 func MakeStringValue(src string) *Value {
 	return &Value{
@@ -136,12 +231,27 @@ func MakeStringValue(src string) *Value {
 	}
 }
 
-func MakeNumericValue(src float64) *Value {
+func makeNumericValue(src *Number) *Value {
 	return &Value{
 		Type:     NumericType,
 		RefValue: src,
 	}
 }
+
+func MakeIntValue(src int64) *Value {
+	return &Value{
+		Type: NumericType,
+		RefValue: Int64Number(src),
+	}
+}
+
+func MakeFloatValue(src float64) *Value {
+	return &Value{
+		Type: NumericType,
+		RefValue: Float64Number(src),
+	}
+}
+
 
 func MakeObjectValue(src *ConfigObject) *Value {
 	return &Value{
