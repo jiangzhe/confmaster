@@ -58,3 +58,28 @@ func parseArrayKey(key string) (string, int, error) {
 	}
 	return key, -1, nil
 }
+
+func traverse(path string, value *Value, f traverseFunc) {
+	switch value.Type {
+	case StringType:
+		f(path, value)
+	case NumericType:
+		f(path, value)
+	case ReferenceType:
+		f(path, value)
+	case ObjectType:
+		f(path, value)
+		// inner loop
+		co := value.RefValue.(*ConfigObject)
+		for k, v := range *co.m {
+			traverse(path + "." + k, v, f)
+		}
+	case ArrayType:
+		f(path, value)
+		// inner loop
+		ca := value.RefValue.(*ConfigArray)
+		for idx, elem := range ca.arr {
+			traverse(fmt.Sprintf("%v[%v]", path, idx), elem, f)
+		}
+	}
+}

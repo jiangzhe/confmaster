@@ -1,0 +1,160 @@
+# server settings
+server:
+  hostname: 127.0.0.1
+  port: 8080
+  session:
+    cookie:
+      name: TCCSESSIONID
+      max-age: 86400
+  compression:
+    enabled: true
+    mime-types:
+    - application/json
+    - application/xml
+    - application/javascript
+    - text/html
+    - text/xml
+    - text/plain
+    - text/css
+  tomcat:
+    accesslog:
+      enabled: true
+      directory: /var/log/tcc
+
+# without flyway, we need to enable DDL initialization via Spring
+spring.datasource:
+  url: jdbc:h2:mem:tccdb;DB_CLOSE_DELAY=-1
+  username: sa
+  password:
+  tomcat:
+    test-while-idle: true
+    time-between-eviction-runs-millis: 3600000
+    validation-query: SELECT 1
+# flyway integration
+management.security.enabled: false
+spring.jpa.hibernate.ddl-auto: validate
+
+tdc:
+  service:
+    location: "http://tdc.transwarp.io"
+
+# the cluster address use for calling wormhole service
+k8s.cluster.address: test1
+
+# app settings
+spring.application.name: tcc
+
+# thymeleaf settings
+spring.thymeleaf.mode: LEGACYHTML5
+
+# ockle setting
+ockle.service:
+  location: "http://127.0.0.1:5180/"
+  loggingLevel: BODY
+  timeoutEnabled: true
+  timeoutInMillis: 20000
+  circuitBreakerEnabled: true
+  circuitBreakerRollingWindowMillis: 30000
+  circuitBreakerSleepWindowMillis: 30000
+  circuitBreakerErrorPercentage: 80
+  circuitBreakerErrorVolume: 100
+
+# enable/disable generic notification
+gn.enabled: false
+
+gn.producer.tcc-essential:
+  topic: "tcc_essential"
+  sender: "tcc-${tenant.uid}"
+  location: "http://127.0.0.1:24444/"
+
+# specify consumer of topic tcc
+gn.consumer.tcc-essential:
+  topic: "tcc_essential"
+  group: "tcc-${tenant.uid}"
+  location: "http://127.0.0.1:24444/"
+  autoCommitEnabled: true
+
+# specify consumer of topic ticket_status
+gn.consumer.ticket-status:
+  topic: "ticket_status"
+  group: "tcc-${tenant.uid}"
+  location: "http://172.16.1.193:24444/"
+  autoCommitEnabled: true
+
+# always use default 80 or 443 as proxy endpoints
+# if use proxy, must apply proxy to both cas and application
+proxy.cas.prefix: "https://127.0.0.1:8393/cas"
+proxy.app.prefix: "http://127.0.0.1:9042"
+# the url for public access, also used in registration email
+public.app.prefix: "http://127.0.0.1:8080"
+
+# cas settings
+# the `server` means the server which performs user authentication
+# the `client` means the application side which receives authentication
+cas:
+  server:
+    prefix: "${proxy.cas.prefix}"
+    login: "${proxy.cas.prefix}/login"
+    logout: "${proxy.cas.prefix}/logout"
+  client:
+    home: "${proxy.app.prefix}"
+    login-path: "/api/v1/login"
+    logout-path: "/api/v1/logout"
+    proxy-path: "/api/v1/proxyreceptor"
+
+# logging setting
+logging.level:
+  root: INFO
+  io.transwarp.tdc.dlock.annotation: DEBUG
+
+# only for testing
+spring:
+  h2:
+    console:
+      enabled: true
+      settings:
+        web-allow-others: true
+  thymeleaf:
+    cache: false
+  http:
+    multipart:
+      max-file-size: 5Mb
+
+ws.stompEndpoint: /ws/connect
+ws.inboundMatcher: /ws/**
+ws.brokerPath: /ws/notifications
+ws.appPrefix: /ws/app
+
+instance:
+  # the minimum node number of creating a instance
+  minNodes: 3
+  # the maximum node number of creating a instance
+  maxNodes: 100
+
+flyway:
+  baseline-on-migrate: true
+
+# actuator exposure of trace endpoint
+endpoints:
+  trace:
+    enabled: true
+    sensitive: false
+  prometheus:
+    # customized prometheus endpoint
+    path: /prometheus
+    monitor-path: /**
+
+plugins:
+  data-sharing:
+    enabled: false
+    adminToken:
+    proxyUser:
+    networkRuleTargets:
+    - tdcsys-net
+    - dataplatform-net
+  studio-management:
+    enabled: false
+
+# enable http caching on static resources
+spring.resources.cache-period: 86400
+

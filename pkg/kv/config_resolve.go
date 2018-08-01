@@ -24,7 +24,6 @@ type ResolvedConfigObject struct {
 func (rco *ResolvedConfigObject) ToConfig() ConfigInterface {
 	return &ConfigObject{
 		m: rco.m,
-		refs: make(map[string]*ConfigReference),
 	}
 }
 

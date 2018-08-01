@@ -2,51 +2,54 @@ package kv
 
 import (
 	"testing"
-	"encoding/json"
 	"bytes"
 	"fmt"
-	"gopkg.in/yaml.v2"
+	"io/ioutil"
+	"os"
+	"path"
 )
 
 func TestConfigRefFromJson(t *testing.T) {
-
+	json1 := []byte(`{"local":{"$ref":{"labels":{"cluster":"1"},"path":"remote"}}}`)
+	conf, err := ConfigFromJson(json1)
+	if err != nil {
+		t.Errorf("json parse error: %v", err)
+		return
+	}
+	ref := conf.GetReference("local")
+	if ref == nil {
+		t.Errorf("reference parse error")
+		return
+	}
+	t.Logf("reference result: %T %v", ref, ref)
 }
 
-func TestJsonUnmarshal(t *testing.T) {
-	m1 := make(map[string]interface{})
-	json1 := []byte(`
-{
-  "a": {"b": 123},
-  "a": {"c": 456}
+func TestConfigFromYaml(t *testing.T) {
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Errorf("get current dir error: %v", err)
+		return
+	}
+
+	file, err := os.Open(path.Clean(path.Join(dir, "testdata/application.yml")))
+	if err != nil {
+		t.Errorf("failed to open file %v", err)
+		return
+	}
+	bs, err := ioutil.ReadAll(file)
+	if err != nil {
+		t.Errorf("failed to read file %v", err)
+		return
+	}
+	conf, err := ConfigFromYaml(bs)
+	if err != nil {
+		t.Errorf("yaml parse error %v", err)
+		return
+	}
+
+	t.Logf("keys: %v", len(conf.Keys()))
+	t.Logf("refs: %v", len(conf.Refs()))
 }
-`)
-	json.Unmarshal(json1, &m1)
-	t.Logf("result: %v", m1)
-}
-
-func TestYamlUnmarshal(t *testing.T) {
-	m1 := make(map[string]interface{})
-
-	yaml1 := []byte(`
-a:
-  b: 123
-
-a:
-  c: 456
-
-a.d: 789
-`)
-	yaml.Unmarshal(yaml1, &m1)
-	t.Logf("result: %v", m1)
-}
-
-func TestDotJson(t *testing.T) {
-	json1 := []byte(`{"hello.world":"perfect"}`)
-	m1 := make(map[string]interface{})
-	json.Unmarshal(json1, &m1)
-	t.Logf("result: %v", m1)
-}
-
 
 func TestConfigObject(t *testing.T) {
 	co := NewConfigObject()
@@ -54,33 +57,6 @@ func TestConfigObject(t *testing.T) {
 	t.Logf(displayConfigObject(co))
 	co.setString("a.b", "hello, world")
 	t.Logf(displayConfigObject(co))
-	co.setReference("a", NewConfigReference(map[string]string{"cluster":"1", "app":"nginx"}, "consumer.config"))
-	t.Logf(displayConfigObject(co))
-}
-
-func displayConfigObject(co *ConfigObject) string {
-	buf := bytes.Buffer{}
-	writeConfigObject(co, &buf)
-	return buf.String()
-}
-
-func writeConfigObject(co *ConfigObject, buf *bytes.Buffer) string {
-	buf.WriteByte('\n')
-	if len(co.refs) == 0 {
-		buf.WriteString("refs: <nil>\n")
-	} else {
-		buf.WriteString(fmt.Sprintf("refs: %v\n", co.refs))
-	}
-
-	if len(*co.m) == 0 {
-		buf.WriteString("m: <nil>\n")
-	} else {
-		buf.WriteString("m: \n")
-		for k, v := range *co.m {
-			buf.WriteString(fmt.Sprintf("%v -> {type=%v value=%v}\n", k, v.Type, v.RefValue))
-		}
-	}
-	return buf.String()
 }
 
 func TestConfigOverwritePath(t *testing.T) {
@@ -117,11 +93,48 @@ func TestMapFromJson(t *testing.T) {
 	}
 }
 
-func TestNumberClone(t *testing.T) {
-	i1 := Int64Number(100)
-	i2 := i1.Clone()
-	t.Logf("%p %p", i1, i2)
-	*i1 = *Int64Number(200)
-	t.Logf("%p %p", i1, i2)
-	t.Logf("%v %v", i1, i2)
+func TestFallback1(t *testing.T) {
+	conf, _ := ConfigFromJson([]byte(`{"a":"A","b":"B"}`))
+	fb, _ := ConfigFromJson([]byte(`{"a":"AAA","c":"CCC"}`))
+	mixed := conf.WithFallback(fb)
+	// a should keep origin value
+	astr := mixed.GetString("a")
+	if astr != "A" {
+		t.Errorf("a value mismatch: %v", astr)
+		return
+	}
+	cstr := mixed.GetString("c")
+	if cstr != "CCC" {
+		t.Errorf("c value mismatch: %v", cstr)
+		return
+	}
 }
+
+// helper functions
+
+func displayConfigObject(co *ConfigObject) string {
+	buf := bytes.Buffer{}
+	writeConfigObject(co, &buf)
+	return buf.String()
+}
+
+func writeConfigObject(co *ConfigObject, buf *bytes.Buffer) string {
+	buf.WriteByte('\n')
+	refs := co.Refs()
+	if len(refs) == 0 {
+		buf.WriteString("refs: <nil>\n")
+	} else {
+		buf.WriteString(fmt.Sprintf("refs: %v\n", refs))
+	}
+
+	if len(*co.m) == 0 {
+		buf.WriteString("m: <nil>\n")
+	} else {
+		buf.WriteString("m: \n")
+		for k, v := range *co.m {
+			buf.WriteString(fmt.Sprintf("%v -> {type=%v value=%v}\n", k, v.Type, v.RefValue))
+		}
+	}
+	return buf.String()
+}
+

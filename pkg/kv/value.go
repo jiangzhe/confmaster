@@ -216,7 +216,8 @@ func (v *Value) Unwrap() interface{} {
 		m := make(map[string]interface{})
 		return m
 	case NumericType:
-		return v.RefValue
+		f, _ := v.RefValue.(*Number).Float64()
+		return f
 	case StringType:
 		return v.RefValue
 	}

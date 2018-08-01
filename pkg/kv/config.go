@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sort"
 	"fmt"
+	"gopkg.in/yaml.v2"
 )
 
 type ConfigInterface interface {
@@ -17,7 +18,7 @@ type ConfigInterface interface {
 	GetObject(path string) *ConfigObject
 	GetArray(path string) *ConfigArray
 	GetReference(path string) *ConfigReference
-	Refs() []string
+	Refs() map[string]*ConfigReference
 	Keys() []string
 	WithFallback(fallback ConfigInterface) ConfigInterface
 }
@@ -31,7 +32,7 @@ var (
 )
 
 // read json bytes and returns config
-func ConfigFromJson(input []byte) (ConfigInterface, error) {
+func ConfigFromJson(input []byte) (*ConfigObject, error) {
 	m, err := mapFromJson(input)
 	if err != nil {
 		return nil, err
@@ -46,13 +47,35 @@ func ConfigFromJson(input []byte) (ConfigInterface, error) {
 	return mp.root, nil
 }
 
-func mapFromJson(input []byte) (m map[string]interface{}, err error) {
+// read yaml bytes and returns config
+func ConfigFromYaml(input []byte) (*ConfigObject, error) {
+	m, err := mapFromYaml(input)
+	if err != nil {
+		return nil, err
+	}
+	mp := &mapProcessor{
+		root: NewConfigObject(),
+		m: m,
+	}
+	if err = mp.traverse(); err != nil {
+		return nil, err
+	}
+	return mp.root, nil
+}
+
+func mapFromJson(input []byte) (map[string]interface{}, error) {
 	buf := bytes.NewBuffer(input)
 	decoder := json.NewDecoder(buf)
 	decoder.UseNumber()
-	m = make(map[string]interface{})
-	err = decoder.Decode(&m)
-	return
+	m := make(map[string]interface{})
+	err := decoder.Decode(&m)
+	return m, err
+}
+
+func mapFromYaml(input []byte) (map[string]interface{}, error) {
+	m := make(map[string]interface{})
+	err := yaml.Unmarshal(input, &m)
+	return m, err
 }
 
 // parse config object from map,
@@ -61,15 +84,15 @@ func mapFromJson(input []byte) (m map[string]interface{}, err error) {
 // key rules:
 //
 // 1. key must be string
-// 2. if key has dot inside, it is treated as a path
+// 2. if key has dot inside, it is treated as a path composite of several keys
 //    path will be split and the value will be set through it, leading to
 //    a nested structure generated
 //    e.g. {"a.b.c":"hello"} will be converted to {"a":{"b":{"c":"hello"}}}
-// 3. if part of the path is a number-like string, effort will be tried
-//    to convert to array
-//    e.g. {"a.0":"hello","a.1":"world"} will be converted to {"a":["hello","world"]}
+// 3. key pattern like 'key[n]' indicates one element in array, the number in brackets
+//    is the index of element
+//    e.g. {"a[0]":"hello","a[1]":"world"} will be converted to {"a":["hello","world"]}
 //    note: the array index must be started from 0 and increment one by one
-//          otherwise, it will not be converted to array but remain a key
+//          otherwise, error will be thrown
 //
 // value rules:
 //
@@ -86,141 +109,6 @@ type mapProcessor struct {
 	m map[string]interface{}
 }
 
-func (mp *mapProcessor) setObject(path string, obj map[string]interface{}) error {
-	// check if reference
-	if r, exists := obj["$ref"]; exists && len(obj) == 1 {
-		ref, ok := r.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("invalid reference object %v", obj)
-		}
-		ls, exists := ref["labels"]
-		if !exists {
-			return fmt.Errorf("invalid reference object: labels not found")
-		}
-		labels, ok := ls.(Labels)
-		if !ok {
-			return fmt.Errorf("invalid reference object: labels is invalid %v", ls)
-		}
-		p, exists := ref["path"]
-		if !exists {
-			return fmt.Errorf("invalid reference object: path not found")
-		}
-		path, ok := p.(string)
-		if !ok {
-			return fmt.Errorf("invalid reference object: path is invalid %v", p)
-		}
-		cr := NewConfigReference(labels, path)
-		mp.root.setReference(path, cr)
-		return nil
-	}
-	co := NewConfigObject()
-	mp.root.setObject(path, co)
-	return mp.traverseObject(path, co, obj)
-}
-
-func (mp *mapProcessor) setArray(path string, arr []interface{}) error {
-	ca := NewConfigArray()
-	mp.root.setArray(path, ca)
-	return mp.traverseArray(path, ca, arr)
-}
-
-func (mp *mapProcessor) setValue(path string, value interface{}) (err error) {
-	switch value.(type) {
-	case types.Nil: // ignored
-	case string:
-		mp.root.setString(path, value.(string))
-	case bool:
-		mp.root.setString(path, strconv.FormatBool(value.(bool)))
-	case json.Number:
-		mp.root.setNumber(path, FromJsonNumber(value.(json.Number)))
-	case float64:
-		mp.root.setNumber(path, Float64Number(value.(float64)))
-	case []interface{}:
-		err = mp.setArray(path, value.([]interface{}))
-	case map[string]interface{}:
-		err = mp.setObject(path, value.(map[string]interface{}))
-	default:
-		return fmt.Errorf("invalid value type: %T", value)
-	}
-	return
-}
-
-func (mp *mapProcessor) traverseArray(path string, ca *ConfigArray, arr []interface{}) (err error) {
-	for idx, elem := range arr {
-		switch elem.(type) {
-		case types.Nil: // ignored
-		case string:
-			ca.addString(elem.(string))
-		case bool:
-			ca.addString(strconv.FormatBool(elem.(bool)))
-		case json.Number:
-			ca.addNumber(FromJsonNumber(elem.(json.Number)))
-		case float64:
-			ca.addNumber(Float64Number(elem.(float64)))
-		case []interface{}:
-			newpath := fmt.Sprintf("%v.%v", path, idx)
-			newarr := elem.([]interface{})
-			newca := NewConfigArray()
-			ca.addArray(ca)
-			if err = mp.traverseArray(newpath, newca, newarr); err != nil {
-				return err
-			}
-		case map[string]interface{}:
-			newpath := fmt.Sprintf("%v.%v", path, idx)
-			newobj := elem.(map[string]interface{})
-			// here we call setObject to handle reference internally
-			if err = mp.setObject(newpath, newobj); err != nil {
-				return err
-			}
-		}
-	}
-	return
-}
-
-func (mp *mapProcessor) traverseObject(path string, co *ConfigObject, obj map[string]interface{}) (err error) {
-	if len(obj) == 0 {
-		return nil
-	}
-	keys := make([]string, len(mp.m))
-	i := 0
-	for k := range mp.m {
-		keys[i] = k
-		i++
-	}
-	// order by key length
-	sort.Sort(&stringLenSorter{keys})
-
-	for _, k := range keys {
-		value := mp.m[k]
-		switch value.(type) {
-		case types.Nil: // ignored
-		case string:
-			co.setString(k, value.(string))
-		case bool:
-			co.setString(k, strconv.FormatBool(value.(bool)))
-		case json.Number:
-			co.setNumber(k, FromJsonNumber(value.(json.Number)))
-		case float64:
-			co.setNumber(k, Float64Number(value.(float64)))
-		case []interface{}:
-			newpath := fmt.Sprintf("%v.%v", path, k)
-			newca := NewConfigArray()
-			newarr := value.([]interface{})
-			co.setArray(k, newca)
-			if err = mp.traverseArray(newpath, newca, newarr); err != nil {
-				return err
-			}
-		case map[string]interface{}:
-			newpath := fmt.Sprintf("%v.%v", path, k)
-			if err = mp.setObject(newpath, value.(map[string]interface{})); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("invalid value type: %T", value)
-		}
-	}
-	return
-}
 
 func (mp *mapProcessor) traverse() error {
 	if len(mp.m) == 0 {
@@ -245,9 +133,103 @@ func (mp *mapProcessor) traverse() error {
 }
 
 
-func concatPath(parent string, child string) string {
-	if parent == "" {
-		return child
+func parseReference(ref interface{}) (*Value, error) {
+	refmap, ok := ref.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid reference object: %v", ref)
 	}
-	return parent + "." + child
+	ls, exists := refmap["labels"]
+	if !exists {
+		return nil, fmt.Errorf("invalid reference object: missing labels")
+	}
+	tmplabels, ok := ls.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid reference object: invalid labels %v", ls)
+	}
+	labels := make(map[string]string, len(tmplabels))
+	for k, v := range tmplabels {
+		if s, ok := v.(string); !ok {
+			return nil, fmt.Errorf("invalid reference object, invalid value in labels %T %v", v, v)
+		} else {
+			labels[k] = s
+		}
+	}
+
+	p, exists := refmap["path"]
+	if !exists {
+		return nil, fmt.Errorf("invalid reference object: missing path")
+	}
+	path, ok := p.(string)
+	if !ok {
+		return nil, fmt.Errorf("invalid reference object: invalid path %v", p)
+	}
+	return MakeReferenceValue(NewConfigReference(Labels(labels), path)), nil
+}
+
+// need to adapt results of json/yaml parsing
+func wrapValue(value interface{}) (*Value, error) {
+	if value == nil {
+		return MakeStringValue(""), nil
+	}
+	switch value.(type) {
+	case types.Nil: return MakeStringValue(""), nil
+	case string: return MakeStringValue(value.(string)), nil
+	case bool: return MakeStringValue(strconv.FormatBool(value.(bool))), nil
+	case json.Number: return makeNumericValue(FromJsonNumber(value.(json.Number))), nil
+	case float64: return makeNumericValue(Float64Number(value.(float64))), nil
+	case int: return makeNumericValue(Int64Number(int64(value.(int)))), nil
+	case []interface{}:
+		arr := value.([]interface{})
+		ca := NewConfigArray()
+		for idx, elem := range arr {
+			v, err := wrapValue(elem)
+			if err != nil {
+				return nil, err
+			}
+			ca.setValue(idx, v)
+		}
+		return MakeArrayValue(ca), nil
+	case map[string]interface{}:
+		m := value.(map[string]interface{})
+		if ref, exists := m["$ref"]; exists {
+			return parseReference(ref)
+		}
+		co := NewConfigObject()
+		for k, v := range m {
+			wrapped, err := wrapValue(v)
+			if err != nil {
+				return nil, err
+			}
+			co.setValue(k, wrapped)
+		}
+		return MakeObjectValue(co), nil
+	case map[interface{}]interface{}:
+		m := value.(map[interface{}]interface{})
+		if ref, exists := m["$ref"]; exists {
+			return parseReference(ref)
+		}
+		co := NewConfigObject()
+		for key, v := range m {
+			k, ok := key.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid key type: %T", key)
+			}
+			wrapped, err := wrapValue(v)
+			if err != nil {
+				return nil, err
+			}
+			co.setValue(k, wrapped)
+		}
+		return MakeObjectValue(co), nil
+	default:
+		return nil, fmt.Errorf("invalid value type: %T", value)
+	}
+}
+
+func (mp *mapProcessor) setValue(path string, value interface{}) error {
+	v, err := wrapValue(value)
+	if err != nil {
+		return err
+	}
+	return mp.root.setValue(path, v)
 }

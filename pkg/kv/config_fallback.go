@@ -74,17 +74,13 @@ func (cf *ConfigFallback) GetReference(path string) *ConfigReference {
 	return nil
 }
 
-func (cf *ConfigFallback) Refs() []string {
-	rm := make(map[string]bool)
-	refs := make([]string, 0)
-	for _, r := range cf.fallback.Refs() {
-		rm[r] = true
+func (cf *ConfigFallback) Refs() map[string]*ConfigReference {
+	refs := make(map[string]*ConfigReference)
+	for k, v := range cf.fallback.Refs() {
+		refs[k] = v
 	}
-	for _, r := range cf.current.Refs() {
-		rm[r] = true
-	}
-	for k := range rm {
-		refs = append(refs, k)
+	for k, v := range cf.current.Refs() {
+		refs[k] = v
 	}
 	return refs
 }
@@ -93,13 +89,16 @@ func (cf *ConfigFallback) Keys() []string {
 	km := make(map[string]bool)
 	keys := make([]string, 0)
 	for _, k := range cf.fallback.Keys() {
-		km[k] = true
+		if !km[k] {
+			km[k] = true
+			keys = append(keys, k)
+		}
 	}
 	for _, k := range cf.current.Keys() {
-		km[k] = true
-	}
-	for k := range km {
-		keys = append(keys, k)
+		if !km[k] {
+			km[k] = true
+			keys = append(keys, k)
+		}
 	}
 	return keys
 }
