@@ -3,6 +3,8 @@ package kv
 import (
 	"strings"
 	"errors"
+	"fmt"
+	"strconv"
 )
 
 type ConfigObject struct {
@@ -63,6 +65,187 @@ func (co *ConfigObject) setString(path string, value string) error {
 func (co *ConfigObject) setNumber(path string, value *Number) error {
 	return setValue(co, path, makeNumericValue(value))
 }
+
+func (co *ConfigObject) merge(newco *ConfigObject) error {
+	if len(*newco.m) == 0 {
+		return nil
+	}
+	for k, v := range *newco.m {
+		if err := co.setKeyValue(k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// set key value which key does not contain dot
+func (co *ConfigObject) setKeyValue(key string, value *Value) error {
+	key, idx, err := parseArrayKey(key)
+	if err != nil {
+		return err
+	}
+	if idx == 0 {
+		// try create array if non-match
+		v := (*co.m)[key]
+		if v == nil || v.Type != ArrayType {
+			// create a new array
+			v = MakeArrayValue(NewConfigArray())
+			ca := v.RefValue.(*ConfigArray)
+			ca.arr = append(ca.arr, value)
+			(*co.m)[key] = v
+			return nil
+		}
+		ca := v.RefValue.(*ConfigArray)
+		if len(ca.arr) == 0 {
+			ca.arr = append(ca.arr, value)
+			return nil
+		}
+		ca.arr[idx] = value
+		return nil
+	} else if idx > 0 {
+		v := (*co.m)[key]
+		if v == nil || v.Type != ArrayType {
+			return fmt.Errorf("value path is invalid: %v", key)
+		}
+		ca := v.RefValue.(*ConfigArray)
+		if idx < len(ca.arr) {
+			ca.arr[idx] = value
+			return nil
+		} else if idx == len(ca.arr) {
+			ca.arr = append(ca.arr, value)
+			return nil
+		}
+		return fmt.Errorf("value index out of bound: %v", idx)
+	}
+	// invalid idx, so use object to set key value
+	v := (*co.m)[key]
+	if v == nil {
+		(*co.m)[key] = value
+		return nil
+	}
+	if v.Type == ObjectType && value.Type == ObjectType {
+		origco := v.RefValue.(*ConfigObject)
+		currco := value.RefValue.(*ConfigObject)
+		if err := origco.merge(currco); err != nil {
+			return err
+		}
+		return nil
+	}
+	(*co.m)[key] = value
+	return nil
+}
+
+
+// todo: set value
+// todo: ref check
+func (co *ConfigObject) setValue(path string, value *Value) error {
+	if !strings.Contains(path, ".") {
+		return co.setKeyValue(path, value)
+	}
+	paths := strings.Split(path, ".")
+
+	for i := 0; i < len(paths)-1; i++ {
+		key := paths[i]
+
+	}
+
+
+	var parent = vs
+	var pkey = paths[0]
+	var currvalue *Value
+	var curr valueSetter
+	var key string
+	//var exists bool
+
+	currvalue = parent.getValueByKey(pkey)
+	if currvalue == nil {
+		if err := setValue(parent, pkey, MakeObjectValue(NewConfigObject())); err != nil {
+			return err
+		}
+		currvalue = parent.getValueByKey(pkey)
+	}
+	currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
+
+pathloop:
+	for i := 1; i < len(paths)-1; i++ {
+		key = paths[i]
+		if n, err := strconv.Atoi(key); err == nil {
+			// is a number
+			switch currvalue.Type {
+			case ArrayType:
+				ca := curr.(*ConfigArray)
+				if n >= 0 && n < len(ca.arr) {
+					// fit an element in array
+					parent = curr
+					pkey = key
+					currvalue = ca.arr[n]
+					currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
+					continue pathloop
+				} else if n == len(ca.arr) {
+					if err := ca.setObject(key, NewConfigObject()); err != nil {
+						return err
+					}
+					parent = curr
+					pkey = key
+					currvalue = ca.arr[n]
+					currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
+					continue pathloop
+				} else {
+					// is a number but out of array bound
+					// just return the error
+					return ErrIndexOutOfBound
+				}
+			}
+			// curr is not a array, but key=0, change to array for parent
+			if n == 0 {
+				parent.setArray(pkey, NewConfigArray())
+				currvalue = parent.getValueByKey(pkey)
+				curr = currvalue.RefValue.(*ConfigArray)
+
+				parent = curr
+				pkey = key
+				// append key=0 to curr array
+				curr.setObject(key, NewConfigObject())
+				currvalue = curr.getValueByKey(key)
+				curr = currvalue.RefValue.(*ConfigObject)
+				continue pathloop
+			}
+		}
+		// key as a string, convert all non-object to object
+		switch currvalue.Type {
+		case ObjectType:
+			co := curr.(*ConfigObject)
+			var exists bool
+			currvalue, exists = (*co.m)[key]
+			if !exists {
+				parent = curr
+				pkey = key
+				currvalue = MakeObjectValue(NewConfigObject())
+				(*co.m)[key] = currvalue
+				currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
+				continue pathloop
+			}
+			parent = curr
+			pkey = key
+			currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
+		default:
+			// non-object type should be modified as object
+			parent.setObject(pkey, NewConfigObject())
+			currvalue = parent.getValueByKey(pkey)
+			co := currvalue.RefValue.(*ConfigObject)
+
+			parent = curr
+			pkey = key
+			currvalue = MakeObjectValue(NewConfigObject())
+			(*co.m)[key] = currvalue
+			currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
+		}
+	}
+	key = paths[len(paths)-1]
+	// final setter and key
+	return setValue(curr, key, value)
+}
+
 
 // todo
 // might have ref

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"strconv"
 	"errors"
+	"fmt"
 )
 
 
@@ -28,17 +29,44 @@ var (
 	ErrInvalidValueSetter = errors.New("invalid value setter")
 )
 
+// parse key to see if it match array key pattern
+// <array-name>[<array-index>]
+// array-name should be at least one char
+// array-index is an integer
+// only one-dimension array is allowed
+func parseArrayKey(key string) (string, int, error) {
+	if len(key) < 4 {
+		return key, -1, nil
+	}
+	if strings.HasSuffix(key, "]") {
+		start := strings.LastIndex(key, "[")
+		if start <= 0 {
+			return key, -1, nil
+		}
+		idx := key[start+1:len(key)-1]
+		i, err := strconv.Atoi(idx)
+		if err != nil {
+			return key, -1, nil
+		}
+		if i < 0 {
+			return key, -1, fmt.Errorf("invalid key index: %v", i)
+		}
+		return key[:start], i, nil
+	}
+	return key, -1, nil
+}
+
 // todo: ref check
 func setValue(vs valueSetter, path string, value *Value) error {
 	if !strings.Contains(path, ".") {
 		switch vs.(type) {
 		case *ConfigObject:
 			co := vs.(*ConfigObject)
+
 			if path == "0" {
 				return ErrTopLevelArrayNotAllowed
 			}
 			(*co.m)[path] = value
-
 			return nil
 		case *ConfigArray:
 			ca := vs.(*ConfigArray)
