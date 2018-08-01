@@ -2,20 +2,13 @@ package kv
 
 import (
 	"strings"
-	"errors"
 	"fmt"
-	"strconv"
 )
 
 type ConfigObject struct {
 	m *map[string]*Value
 	refs map[string]*ConfigReference
 }
-
-
-var (
-	ErrIndexOutOfBound = errors.New("key index out of bound")
-)
 
 // given a path, traverse and find the key until last path,
 // immediately return nil if key is not found
@@ -58,14 +51,9 @@ func (co *ConfigObject) removeRef(path string) {
 	delete(co.refs, path)
 }
 
-func (co *ConfigObject) setString(path string, value string) error {
-	return setValue(co, path, MakeStringValue(value))
-}
 
-func (co *ConfigObject) setNumber(path string, value *Number) error {
-	return setValue(co, path, makeNumericValue(value))
-}
 
+// merge given config object to current one
 func (co *ConfigObject) merge(newco *ConfigObject) error {
 	if len(*newco.m) == 0 {
 		return nil
@@ -96,26 +84,14 @@ func (co *ConfigObject) setKeyValue(key string, value *Value) error {
 			return nil
 		}
 		ca := v.RefValue.(*ConfigArray)
-		if len(ca.arr) == 0 {
-			ca.arr = append(ca.arr, value)
-			return nil
-		}
-		ca.arr[idx] = value
-		return nil
+		return ca.setValue(idx, value)
 	} else if idx > 0 {
 		v := (*co.m)[key]
 		if v == nil || v.Type != ArrayType {
 			return fmt.Errorf("value path is invalid: %v", key)
 		}
 		ca := v.RefValue.(*ConfigArray)
-		if idx < len(ca.arr) {
-			ca.arr[idx] = value
-			return nil
-		} else if idx == len(ca.arr) {
-			ca.arr = append(ca.arr, value)
-			return nil
-		}
-		return fmt.Errorf("value index out of bound: %v", idx)
+		return ca.setValue(idx, value)
 	}
 	// invalid idx, so use object to set key value
 	v := (*co.m)[key]
@@ -135,6 +111,13 @@ func (co *ConfigObject) setKeyValue(key string, value *Value) error {
 	return nil
 }
 
+func (co *ConfigObject) setString(path string, value string) error {
+	return co.setValue(path, MakeStringValue(value))
+}
+
+func (co *ConfigObject) setNumber(path string, value *Number) error {
+	return co.setValue(path, makeNumericValue(value))
+}
 
 // todo: set value
 // todo: ref check
@@ -144,164 +127,56 @@ func (co *ConfigObject) setValue(path string, value *Value) error {
 	}
 	paths := strings.Split(path, ".")
 
-	for i := 0; i < len(paths)-1; i++ {
-		key := paths[i]
-
-	}
-
-
-	var parent = vs
-	var pkey = paths[0]
-	var currvalue *Value
-	var curr valueSetter
 	var key string
-	//var exists bool
-
-	currvalue = parent.getValueByKey(pkey)
-	if currvalue == nil {
-		if err := setValue(parent, pkey, MakeObjectValue(NewConfigObject())); err != nil {
-			return err
-		}
-		currvalue = parent.getValueByKey(pkey)
-	}
-	currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
-
-pathloop:
-	for i := 1; i < len(paths)-1; i++ {
+	var obj = co
+	for i := 0; i < len(paths)-1; i++ {
 		key = paths[i]
-		if n, err := strconv.Atoi(key); err == nil {
-			// is a number
-			switch currvalue.Type {
-			case ArrayType:
-				ca := curr.(*ConfigArray)
-				if n >= 0 && n < len(ca.arr) {
-					// fit an element in array
-					parent = curr
-					pkey = key
-					currvalue = ca.arr[n]
-					currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
-					continue pathloop
-				} else if n == len(ca.arr) {
-					if err := ca.setObject(key, NewConfigObject()); err != nil {
-						return err
-					}
-					parent = curr
-					pkey = key
-					currvalue = ca.arr[n]
-					currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
-					continue pathloop
-				} else {
-					// is a number but out of array bound
-					// just return the error
-					return ErrIndexOutOfBound
-				}
-			}
-			// curr is not a array, but key=0, change to array for parent
-			if n == 0 {
-				parent.setArray(pkey, NewConfigArray())
-				currvalue = parent.getValueByKey(pkey)
-				curr = currvalue.RefValue.(*ConfigArray)
-
-				parent = curr
-				pkey = key
-				// append key=0 to curr array
-				curr.setObject(key, NewConfigObject())
-				currvalue = curr.getValueByKey(key)
-				curr = currvalue.RefValue.(*ConfigObject)
-				continue pathloop
-			}
+		// auto merge if target is also object
+		v := obj.getValueByKey(key)
+		if v == nil || v.Type != ObjectType {
+			v = MakeObjectValue(NewConfigObject())
+			obj.setKeyValue(key, v)
 		}
-		// key as a string, convert all non-object to object
-		switch currvalue.Type {
-		case ObjectType:
-			co := curr.(*ConfigObject)
-			var exists bool
-			currvalue, exists = (*co.m)[key]
-			if !exists {
-				parent = curr
-				pkey = key
-				currvalue = MakeObjectValue(NewConfigObject())
-				(*co.m)[key] = currvalue
-				currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
-				continue pathloop
-			}
-			parent = curr
-			pkey = key
-			currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
-		default:
-			// non-object type should be modified as object
-			parent.setObject(pkey, NewConfigObject())
-			currvalue = parent.getValueByKey(pkey)
-			co := currvalue.RefValue.(*ConfigObject)
-
-			parent = curr
-			pkey = key
-			currvalue = MakeObjectValue(NewConfigObject())
-			(*co.m)[key] = currvalue
-			currvalue, curr = updateValueIfNonmatch(currvalue, &parent, pkey)
-		}
+		obj = v.RefValue.(*ConfigObject)
 	}
 	key = paths[len(paths)-1]
-	// final setter and key
-	return setValue(curr, key, value)
+	return obj.setKeyValue(key, value)
 }
 
-
-// todo
-// might have ref
 func (co *ConfigObject) setObject(path string, value *ConfigObject) error {
-	if obj := co.GetValue(path); obj != nil && obj.Type == ObjectType {
-		orig := obj.RefValue.(*ConfigObject)
-		for k, v := range *value.m {
-			if obj, ok := (*orig.m)[k]; ok {
-				if obj.Type == v.Type {
-					switch obj.Type {
-					case ObjectType:
-						co.setObject(path + "." + k, v.RefValue.(*ConfigObject))
-					case ArrayType:
-						array := obj.RefValue.(*ConfigArray)
-						array.arr = append(array.arr, v.RefValue.(*ConfigArray).arr...)
-					case ReferenceType:
-						fallthrough
-					case StringType:
-						fallthrough
-					case NumericType:
-						fallthrough
-					case FallbackType:
-						co.setValue(path + "." + k, v.Type, v.RefValue)
-					}
-				} else if err := co.setValue(path + "." + k, ObjectType, value); err != nil {
-					return err
-				}
-			} else if err := co.setValue(path + "." + k, ObjectType, value); err != nil {
-				return err
-			}
-		}
-		return nil
-	} else {
-		return co.setValue(path, ObjectType, value)
-	}
+	return co.setValue(path, MakeObjectValue(value))
 }
 
 func (co *ConfigObject) setArray(path string, value *ConfigArray) error {
-	return setValue(co, path, MakeArrayValue(value))
+	return co.setValue(path, MakeArrayValue(value))
 }
 
 func (co *ConfigObject) setReference(path string, value *ConfigReference) error {
-	return setValue(co, path, MakeReferenceValue(value))
+	return co.setValue(path, MakeReferenceValue(value))
 }
 
 func (co *ConfigObject) getValueByKey(key string) *Value {
-	return (*co.m)[key]
+	key, idx, err := parseArrayKey(key)
+	if err != nil {
+		return nil
+	}
+	if idx == -1 {
+		return (*co.m)[key]
+	}
+	// find element in array
+	v := (*co.m)[key]
+	if v == nil || v.Type != ArrayType {
+		return nil
+	}
+	ca := v.RefValue.(*ConfigArray)
+	return ca.getValue(idx)
 }
 
-// todo
-func (co *ConfigObject) unset(path string) error {
-	obj, key := co.findKey(path)
-	if obj != nil {
-		delete(*obj.m, key)
+func (co *ConfigObject) traverse(f traverseFunc) {
+	if len(*co.m) == 0 {
+		return
 	}
-	return nil
+	
 }
 
 func (co *ConfigObject) GetValue(path string) (res *Value) {
@@ -439,7 +314,7 @@ func (co *ConfigObject) withFallbackObject(fallback *ConfigObject) ConfigInterfa
 
 	result := fallback.Clone()
 	for k, v := range *co.m {
-		result.setValue(k, v.Type, v.Clone().RefValue)
+		result.setValue(k, v.Clone())
 	}
 	return result
 }
