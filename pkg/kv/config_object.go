@@ -130,10 +130,14 @@ func (co *ConfigObject) getValueByKey(key string) *Value {
 	return ca.getValue(idx)
 }
 
-func (co *ConfigObject) traverse(f traverseFunc) {
+func (co *ConfigObject) traverse(f traverseFunc) error {
+	var err error
 	for k, v := range *co.m {
-		traverse(k, v, f)
+		if err = traverse(k, v, f); err != nil {
+			return err
+		}
 	}
+	return err
 }
 
 // implements ConfigInterface
@@ -157,13 +161,22 @@ func (co *ConfigObject) GetValue(path string) *Value {
 	return obj.getValueByKey(key)
 }
 
-func (co *ConfigObject) GetString(path string) string {
+func (co *ConfigObject) GetString(path string, defaultValue string) string {
 	if value := co.GetValue(path); value != nil {
 		switch value.Type {
 		case StringType: return value.RefValue.(string)
 		}
 	}
-	return ""
+	return defaultValue
+}
+
+func (co *ConfigObject) GetBool(path string, defaultValue bool) bool {
+	if value := co.GetValue(path); value != nil {
+		switch value.Type {
+		case BoolType: return value.RefValue.(bool)
+		}
+	}
+	return defaultValue
 }
 
 func (co *ConfigObject) GetNumber(path string) *Number {
@@ -204,11 +217,12 @@ func (co *ConfigObject) GetReference(path string) *ConfigReference {
 
 func (co *ConfigObject) Refs() map[string]*ConfigReference {
 	refs := make(map[string]*ConfigReference)
-	co.traverse(func(path string, value *Value) {
+	co.traverse(func(path string, value *Value) error {
 		switch value.Type {
 		case ReferenceType:
 			refs[path] = value.RefValue.(*ConfigReference)
 		}
+		return nil
 	})
 	return refs
 }

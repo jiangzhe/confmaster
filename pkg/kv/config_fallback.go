@@ -24,14 +24,14 @@ func (cf *ConfigFallback) GetValue(path string) *Value {
 	return nil
 }
 
-func (cf *ConfigFallback) GetString(path string) string {
+func (cf *ConfigFallback) GetString(path string, defaultValue string) string {
 	if v := cf.GetValue(path); v != nil {
 		switch v.Type {
 		case StringType:
 			return v.RefValue.(string)
 		}
 	}
-	return ""
+	return defaultValue
 }
 
 func (cf *ConfigFallback) GetNumber(path string) *Number {
@@ -72,6 +72,16 @@ func (cf *ConfigFallback) GetReference(path string) *ConfigReference {
 		}
 	}
 	return nil
+}
+
+func (cf *ConfigFallback) GetBool(path string, defaultValue bool) bool {
+	if v := cf.GetValue(path); v != nil {
+		switch v.Type {
+		case BoolType:
+			return v.RefValue.(bool)
+		}
+	}
+	return defaultValue
 }
 
 func (cf *ConfigFallback) Refs() map[string]*ConfigReference {

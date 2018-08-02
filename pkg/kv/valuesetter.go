@@ -24,7 +24,7 @@ type valueSetter interface {
 	traverse(traverseFunc)
 }
 
-type traverseFunc func(path string, value *Value)
+type traverseFunc func(path string, value *Value) error
 
 var (
 	ErrTopLevelArrayNotAllowed = errors.New("top level array not allowed")
@@ -59,27 +59,39 @@ func parseArrayKey(key string) (string, int, error) {
 	return key, -1, nil
 }
 
-func traverse(path string, value *Value, f traverseFunc) {
+func traverse(path string, value *Value, f traverseFunc) error {
+	var err error
 	switch value.Type {
 	case StringType:
-		f(path, value)
+		err = f(path, value)
 	case NumericType:
-		f(path, value)
+		err = f(path, value)
+	case BoolType:
+		err = f(path, value)
 	case ReferenceType:
-		f(path, value)
+		err = f(path, value)
 	case ObjectType:
-		f(path, value)
+		if err = f(path, value); err != nil {
+			return err
+		}
 		// inner loop
 		co := value.RefValue.(*ConfigObject)
 		for k, v := range *co.m {
-			traverse(path + "." + k, v, f)
+			if err = traverse(path + "." + k, v, f); err != nil {
+				return err
+			}
 		}
 	case ArrayType:
-		f(path, value)
+		if err = f(path, value); err != nil {
+			return err
+		}
 		// inner loop
 		ca := value.RefValue.(*ConfigArray)
 		for idx, elem := range ca.arr {
-			traverse(fmt.Sprintf("%v[%v]", path, idx), elem, f)
+			if err = traverse(fmt.Sprintf("%v[%v]", path, idx), elem, f); err != nil {
+				return err
+			}
 		}
 	}
+	return err
 }

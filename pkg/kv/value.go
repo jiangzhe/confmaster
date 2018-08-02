@@ -15,6 +15,7 @@ const (
 	ObjectType
 	ArrayType
 	FallbackType
+	BoolType
 )
 
 func (vt *ValueType) MarshalJSON() ([]byte, error) {
@@ -31,6 +32,8 @@ func (vt *ValueType) MarshalJSON() ([]byte, error) {
 		return []byte(`"array"`), nil
 	case FallbackType:
 		return []byte(`"fallback"`), nil
+	case BoolType:
+		return []byte(`"boolean"`), nil
 	}
 	return nil, fmt.Errorf("unknown value type %v", *vt)
 }
@@ -48,6 +51,7 @@ func (vt *ValueType) UnmarshalJSON(data []byte) error {
 	case "object": *vt = ObjectType
 	case "array": *vt = ArrayType
 	case "fallback": *vt = FallbackType
+	case "boolean": *vt = BoolType
 	default: return fmt.Errorf("invalid value type to decode: %v", s)
 	}
 	return nil
@@ -181,6 +185,8 @@ func (v *Value) Clone() *Value {
 		ref = v.RefValue.(*Number).Clone()
 	case StringType:
 		ref = v.RefValue
+	case BoolType:
+		ref = v.RefValue
 	}
 	return &Value{
 		Type: v.Type,
@@ -219,6 +225,8 @@ func (v *Value) Unwrap() interface{} {
 		f, _ := v.RefValue.(*Number).Float64()
 		return f
 	case StringType:
+		return v.RefValue
+	case BoolType:
 		return v.RefValue
 	}
 	return nil
@@ -279,6 +287,13 @@ func MakeReferenceValue(src *ConfigReference) *Value {
 func makeFallbackValue(src *ConfigFallback) *Value {
 	return &Value{
 		Type:     FallbackType,
+		RefValue: src,
+	}
+}
+
+func MakeBoolValue(src bool) *Value {
+	return &Value{
+		Type:     BoolType,
 		RefValue: src,
 	}
 }

@@ -46,9 +46,23 @@ func TestConfigFromYaml(t *testing.T) {
 		t.Errorf("yaml parse error %v", err)
 		return
 	}
-
 	t.Logf("keys: %v", len(conf.Keys()))
 	t.Logf("refs: %v", len(conf.Refs()))
+
+	mr := &mockResolver{}
+	rco, err := mr.Resolve(conf)
+	if err != nil {
+		t.Errorf("resolve error: %v", err)
+		return
+	}
+	output, err := rco.Format(NewYamlFormatter(0))
+	if err != nil {
+		t.Errorf("format error: %v", err)
+		return
+	}
+	t.Logf("formatted as below: ")
+	t.Logf(string(output))
+
 }
 
 func TestConfigObject(t *testing.T) {
@@ -80,30 +94,17 @@ func TestConfigOverwritePath(t *testing.T) {
 	}
 }
 
-func TestMapFromJson(t *testing.T) {
-	m, err := mapFromJson([]byte(`{"a":"A", "b":123, "c.d":{}, "e":null, "f":[1, true, null], "g":true}`))
-	if err != nil {
-		t.Errorf("json unmarshal error: %v", err)
-	}
-	t.Logf("map result: %v", m)
-	t.Logf("type b: %T", m["b"])
-
-	for k, v := range m {
-		t.Logf("k=%v, v=%v, v.type=%T", k, v, v)
-	}
-}
-
 func TestFallback1(t *testing.T) {
 	conf, _ := ConfigFromJson([]byte(`{"a":"A","b":"B"}`))
 	fb, _ := ConfigFromJson([]byte(`{"a":"AAA","c":"CCC"}`))
 	mixed := conf.WithFallback(fb)
 	// a should keep origin value
-	astr := mixed.GetString("a")
+	astr := mixed.GetString("a", "")
 	if astr != "A" {
 		t.Errorf("a value mismatch: %v", astr)
 		return
 	}
-	cstr := mixed.GetString("c")
+	cstr := mixed.GetString("c", "")
 	if cstr != "CCC" {
 		t.Errorf("c value mismatch: %v", cstr)
 		return
