@@ -2,9 +2,10 @@ package kv
 
 import (
 	"testing"
-	"encoding/json"
 	"errors"
-	"reflect"
+	"io/ioutil"
+	"os"
+	"path"
 )
 
 func mockConfigObject() ResolvedConfigInterface {
@@ -31,21 +32,52 @@ func TestConfigObjectFormatJson(t *testing.T) {
 		return
 	}
 	t.Logf("json:\n%v", string(bs))
-	m1 := make(map[string]interface{})
-	//buf := bytes.NewBuffer(bs)
-	//decoder := json.NewDecoder(buf)
-	//decoder.UseNumber()
-	//decoder.Decode(&m1)
-	json.Unmarshal(bs, &m1)
-	m2 := rco.ToMap()
-	if !reflect.DeepEqual(m1, m2) {
-		t.Errorf("format mismatch: %v %v", m1, m2)
-		d1 := m1["c"].(map[string]interface{})["d"]
-		d2 := m2["c"].(map[string]interface{})["d"]
-		t.Logf("type d: %t %t", d1, d2)
-		n2, err := d2.(float64)
-		t.Logf("n2=%v, err=%v", n2, err)
+}
+
+func TestConfigObjectFormatYaml(t *testing.T) {
+	rco := mockConfigObject()
+	bs, err := rco.Format(NewYamlFormatter(0))
+	if err != nil {
+		t.Errorf("format error: %v", err)
+		return
 	}
+	t.Logf("yaml:\n%v", string(bs))
+}
+
+func TestConfigObjectReformatYaml(t *testing.T) {
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Errorf("get current dir error: %v", err)
+		return
+	}
+
+	file, err := os.Open(path.Clean(path.Join(dir, "testdata/application.yml")))
+	if err != nil {
+		t.Errorf("failed to open file %v", err)
+		return
+	}
+	bs, err := ioutil.ReadAll(file)
+	if err != nil {
+		t.Errorf("failed to read file %v", err)
+		return
+	}
+	conf, err := ConfigFromYaml(bs)
+	if err != nil {
+		t.Errorf("yaml parse error %v", err)
+		return
+	}
+	mr := &mockResolver{}
+	rco, err := mr.Resolve(conf)
+	if err != nil {
+		t.Errorf("resolve error %v", err)
+		return
+	}
+	bs, err = rco.Format(NewYamlFormatter(0))
+	if err != nil {
+		t.Errorf("format error: %v", err)
+		return
+	}
+	t.Logf("yaml:\n%v", string(bs))
 }
 
 type mockResolver struct {}
