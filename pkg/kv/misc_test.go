@@ -80,3 +80,10 @@ b:
 	t.Logf("%v", ms)
 	t.Logf("%v", arr)
 }
+
+func TestRangeEmptyArr(t *testing.T) {
+	arr := make(map[string]interface{})
+	for k, v := range arr {
+		t.Logf("key=%v, value=%v", k, v)
+	}
+}

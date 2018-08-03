@@ -6,15 +6,16 @@ import (
 )
 
 type ConfigObject struct {
-	m *map[string]*Value
+	m *LinkedMap
 }
 
 // merge given config object to current one
 func (co *ConfigObject) merge(newco *ConfigObject) error {
-	if len(*newco.m) == 0 {
+	if newco.m.Len() == 0 {
 		return nil
 	}
-	for k, v := range *newco.m {
+	for _, k := range newco.m.Keys() {
+		v := newco.m.Get(k)
 		if err := co.setKeyValue(k, v); err != nil {
 			return err
 		}
@@ -30,29 +31,28 @@ func (co *ConfigObject) setKeyValue(key string, value *Value) error {
 	}
 	if idx == 0 {
 		// try create array if non-match
-		v := (*co.m)[key]
+		v := co.m.Get(key)
 		if v == nil || v.Type != ArrayType {
 			// create a new array
 			v = MakeArrayValue(NewConfigArray())
 			ca := v.RefValue.(*ConfigArray)
 			ca.arr = append(ca.arr, value)
-			(*co.m)[key] = v
+			co.m.Put(key, v)
 			return nil
 		}
 		ca := v.RefValue.(*ConfigArray)
 		return ca.setValue(idx, value)
 	} else if idx > 0 {
-		v := (*co.m)[key]
+		v := co.m.Get(key)
 		if v == nil || v.Type != ArrayType {
 			return fmt.Errorf("value path is invalid: %v", key)
 		}
 		ca := v.RefValue.(*ConfigArray)
 		return ca.setValue(idx, value)
 	}
-	// invalid idx, so use object to set key value
-	v := (*co.m)[key]
+	v := co.m.Get(key)
 	if v == nil {
-		(*co.m)[key] = value
+		co.m.Put(key, value)
 		return nil
 	}
 	if v.Type == ObjectType && value.Type == ObjectType {
@@ -63,7 +63,7 @@ func (co *ConfigObject) setKeyValue(key string, value *Value) error {
 		}
 		return nil
 	}
-	(*co.m)[key] = value
+	co.m.Put(key, value)
 	return nil
 }
 
@@ -119,10 +119,9 @@ func (co *ConfigObject) getValueByKey(key string) *Value {
 		return nil
 	}
 	if idx == -1 {
-		return (*co.m)[key]
+		return co.m.Get(key)
 	}
-	// find element in array
-	v := (*co.m)[key]
+	v := co.m.Get(key)
 	if v == nil || v.Type != ArrayType {
 		return nil
 	}
@@ -132,7 +131,8 @@ func (co *ConfigObject) getValueByKey(key string) *Value {
 
 func (co *ConfigObject) traverse(f traverseFunc) error {
 	var err error
-	for k, v := range *co.m {
+	for _, k := range co.m.Keys() {
+		v := co.m.Get(k)
 		if err = traverse(k, v, f); err != nil {
 			return err
 		}
@@ -228,22 +228,19 @@ func (co *ConfigObject) Refs() map[string]*ConfigReference {
 }
 
 func (co *ConfigObject) Keys() []string {
-	res := make([]string, len(*co.m))
-	i := 0
-	for k := range *co.m {
-		res[i] = k
-		i++
-	}
+	res := make([]string, co.m.Len())
+	copy(res, co.m.Keys())
 	return res
 }
 
 func (co *ConfigObject) Clone() *ConfigObject {
-	m := make(map[string]*Value, len(*co.m))
-	for k, v := range *co.m {
-		m[k] = v.Clone()
+	m := NewLinkedMap(co.m.Len())
+	for _, k := range co.m.Keys() {
+		v := co.m.Get(k)
+		m.Put(k, v.Clone())
 	}
 	return &ConfigObject{
-		m: &m,
+		m: m,
 	}
 }
 
@@ -278,19 +275,19 @@ func (co *ConfigObject) withFallbackObject(fallback *ConfigObject) ConfigInterfa
 		}
 	}
 
+	// fallback as base, preserve key order
 	result := fallback.Clone()
-	for k, v := range *co.m {
+	for _, k := range co.m.Keys() {
+		v := co.m.Get(k)
 		result.setValue(k, v.Clone())
 	}
 	return result
 }
 
 func NewConfigObject() *ConfigObject {
-	m := make(map[string]*Value)
-	co := ConfigObject{
-		m: &m,
+	return &ConfigObject{
+		m: NewLinkedMap(0),
 	}
-	return &co
 }
 
 

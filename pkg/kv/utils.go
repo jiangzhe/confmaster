@@ -16,12 +16,19 @@ func (sls *stringLenSorter) Swap(i, j int) {
 	sls.arr[i], sls.arr[j] = sls.arr[j], sls.arr[i]
 }
 
-type linkedMap struct {
+type LinkedMap struct {
 	m map[string]*Value
 	ks []string
 }
 
-func (lm *linkedMap) put(key string, value *Value) {
+func NewLinkedMap(capacity int) *LinkedMap {
+	return &LinkedMap{
+		m: make(map[string]*Value, capacity),
+		ks: make([]string, 0, capacity),
+	}
+}
+
+func (lm *LinkedMap) Put(key string, value *Value) {
 	_, exists := lm.m[key]
 	if !exists {
 		lm.ks = append(lm.ks, key)
@@ -29,7 +36,7 @@ func (lm *linkedMap) put(key string, value *Value) {
 	lm.m[key] = value
 }
 
-func (lm *linkedMap) del(key string) {
+func (lm *LinkedMap) Del(key string) {
 	_, exists := lm.m[key]
 	if exists {
 		found := -1
@@ -47,10 +54,18 @@ func (lm *linkedMap) del(key string) {
 	delete(lm.m, key)
 }
 
-func (lm *linkedMap) keys() []string {
+func (lm *LinkedMap) Keys() []string {
 	keys := make([]string, len(lm.ks))
 	for i, elem := range lm.ks {
 		keys[i] = elem
 	}
 	return keys
+}
+
+func (lm *LinkedMap) Len() int {
+	return len(lm.m)
+}
+
+func (lm *LinkedMap) Get(key string) *Value {
+	return lm.m[key]
 }

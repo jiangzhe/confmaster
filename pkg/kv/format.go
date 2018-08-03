@@ -2,12 +2,11 @@ package kv
 
 import (
 	"bytes"
-	"fmt"
 	"encoding/json"
 	"gopkg.in/yaml.v2"
-	"io"
 	"strings"
 	"bufio"
+	"strconv"
 )
 
 // formatter can format a resolved config to bytes
@@ -44,12 +43,13 @@ func NewYamlFormatter(prefix int) Formatter {
 	}
 }
 
+// yaml formatter need to use special MapSlice to retain key order
 type yamlFormatter struct {
 	prefix string
 }
 
 func (yf *yamlFormatter) Format(config ResolvedConfigInterface) ([]byte, error) {
-	bs, err := yaml.Marshal(config.ToMap())
+	bs, err := yaml.Marshal(config.ToMapSlice())
 	if err != nil {
 		return nil, err
 	}
@@ -73,40 +73,39 @@ func NewPropertiesFormatter() Formatter {
 type propertiesFormatter struct {}
 
 func (pf *propertiesFormatter) Format(config ResolvedConfigInterface) ([]byte, error) {
-	m := config.ToMap()
-	buf := new(bytes.Buffer)
-	for k, v := range m {
-		formatProperties([]byte(k), v, buf)
+	//m := config.ToMap()
+	//buf := new(bytes.Buffer)
+	//for k, v := range m {
+	//	formatProperties([]byte(k), v, buf)
+	//}
+	//return buf.Bytes(), nil
+	co := config.ToConfig()
+	buf := bytes.Buffer{}
+	err := co.traverse(func(path string, value *Value) error {
+		if value == nil {
+			return nil
+		}
+		switch value.Type {
+		case StringType:
+			buf.Write([]byte(path))
+			buf.WriteByte('=')
+			buf.Write([]byte(value.RefValue.(string)))
+			buf.WriteByte('\n')
+		case BoolType:
+			buf.Write([]byte(path))
+			buf.WriteByte('=')
+			buf.Write([]byte(strconv.FormatBool(value.RefValue.(bool))))
+			buf.WriteByte('\n')
+		case NumericType:
+			buf.Write([]byte(path))
+			buf.WriteByte('=')
+			buf.Write([]byte(*value.RefValue.(*Number)))
+			buf.WriteByte('\n')
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return buf.Bytes(), nil
-}
-
-func formatProperties(path []byte, value interface{}, writer io.Writer) error {
-	m, ok := value.(map[string]interface{})
-	if ok {
-		for k, v := range m {
-			p := make([]byte, 0, len(path) + len(k) + 1)
-			p = append(p, []byte(path)...)
-			p = append(p, '.')
-			p = append(p, []byte(k)...)
-			if err := formatProperties(p, v, writer); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	a, ok := value.([]interface{})
-	if ok {
-		for i, v := range a {
-			p := append(path, []byte(fmt.Sprintf(".[%v]", i))...)
-			if err := formatProperties(p, v, writer); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	if _, err := writer.Write([]byte(fmt.Sprintf("%v=%v\n", string(path), value))); err != nil {
-		return err
-	}
-	return nil
 }

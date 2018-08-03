@@ -76,7 +76,8 @@ func traverse(path string, value *Value, f traverseFunc) error {
 		}
 		// inner loop
 		co := value.RefValue.(*ConfigObject)
-		for k, v := range *co.m {
+		for _, k := range co.m.Keys() {
+			v := co.m.Get(k)
 			if err = traverse(path + "." + k, v, f); err != nil {
 				return err
 			}

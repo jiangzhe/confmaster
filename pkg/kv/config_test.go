@@ -62,7 +62,46 @@ func TestConfigFromYaml(t *testing.T) {
 	}
 	t.Logf("formatted as below: ")
 	t.Logf(string(output))
+}
 
+func TestConfigFromYamlToProperties(t *testing.T) {
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Errorf("get current dir error: %v", err)
+		return
+	}
+
+	file, err := os.Open(path.Clean(path.Join(dir, "testdata/application.yml")))
+	if err != nil {
+		t.Errorf("failed to open file %v", err)
+		return
+	}
+	bs, err := ioutil.ReadAll(file)
+	if err != nil {
+		t.Errorf("failed to read file %v", err)
+		return
+	}
+	conf, err := ConfigFromYaml(bs)
+	if err != nil {
+		t.Errorf("yaml parse error %v", err)
+		return
+	}
+	t.Logf("keys: %v", len(conf.Keys()))
+	t.Logf("refs: %v", len(conf.Refs()))
+
+	mr := &mockResolver{}
+	rco, err := mr.Resolve(conf)
+	if err != nil {
+		t.Errorf("resolve error: %v", err)
+		return
+	}
+	output, err := rco.Format(NewPropertiesFormatter())
+	if err != nil {
+		t.Errorf("format error: %v", err)
+		return
+	}
+	t.Logf("formatted as below: ")
+	t.Logf(string(output))
 }
 
 func TestConfigObject(t *testing.T) {
@@ -95,8 +134,16 @@ func TestConfigOverwritePath(t *testing.T) {
 }
 
 func TestFallback1(t *testing.T) {
-	conf, _ := ConfigFromJson([]byte(`{"a":"A","b":"B"}`))
-	fb, _ := ConfigFromJson([]byte(`{"a":"AAA","c":"CCC"}`))
+	conf, err := ConfigFromJson([]byte(`{"a":"A","b":"B"}`))
+	if err != nil {
+		t.Errorf("json unmarshal error: %v", err)
+		return
+	}
+	fb, err := ConfigFromJson([]byte(`{"a":"AAA","c":"CCC"}`))
+	if err != nil {
+		t.Errorf("json unmarshal error: %v", err)
+		return
+	}
 	mixed := conf.WithFallback(fb)
 	// a should keep origin value
 	astr := mixed.GetString("a", "")
@@ -128,11 +175,12 @@ func writeConfigObject(co *ConfigObject, buf *bytes.Buffer) string {
 		buf.WriteString(fmt.Sprintf("refs: %v\n", refs))
 	}
 
-	if len(*co.m) == 0 {
+	if co.m.Len() == 0 {
 		buf.WriteString("m: <nil>\n")
 	} else {
 		buf.WriteString("m: \n")
-		for k, v := range *co.m {
+		for _, k := range co.m.Keys() {
+			v := co.m.Get(k)
 			buf.WriteString(fmt.Sprintf("%v -> {type=%v value=%v}\n", k, v.Type, v.RefValue))
 		}
 	}

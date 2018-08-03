@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"encoding/json"
 	"strconv"
+	"gopkg.in/yaml.v2"
 )
 
 type ValueType int
@@ -195,15 +196,57 @@ func (v *Value) Clone() *Value {
 }
 
 // unwrap and return the inner value
+// for object type, key ordering will be lost
 func (v *Value) Unwrap() interface{} {
 	switch v.Type {
 	case ObjectType:
 		co := v.RefValue.(*ConfigObject)
 		m := make(map[string]interface{})
-		for k, v := range *co.m {
+		for _, k := range co.m.Keys() {
+			v := co.m.Get(k)
 			m[k] = v.Unwrap()
 		}
 		return m
+	case ArrayType:
+		ca := v.RefValue.(*ConfigArray)
+		arr := make([]interface{}, 0, len(ca.arr))
+		for _, elem := range ca.arr {
+			arr = append(arr, elem.Unwrap())
+		}
+		return arr
+	case ReferenceType:
+		cr := v.RefValue.(*ConfigReference)
+		m := make(map[string]interface{})
+		m["labels"]= cr.Labels
+		m["path"] = cr.Path
+		return m
+	case FallbackType:
+		// should not happen
+		m := make(map[string]interface{})
+		return m
+	case NumericType:
+		f, _ := v.RefValue.(*Number).Float64()
+		return f
+	case StringType:
+		return v.RefValue
+	case BoolType:
+		return v.RefValue
+	}
+	return nil
+}
+
+func (v *Value) UnwrapPreserveOrder() interface{} {
+	switch v.Type {
+	case ObjectType:
+		co := v.RefValue.(*ConfigObject)
+
+		ms := &MapSlice{}
+		for _, k := range co.m.Keys() {
+			v := co.m.Get(k)
+			item := MapItem{Key: k, Value: v.UnwrapPreserveOrder()}
+			*ms = append(*ms, yaml.MapItem(item))
+		}
+		return ms
 	case ArrayType:
 		ca := v.RefValue.(*ConfigArray)
 		arr := make([]interface{}, 0, len(ca.arr))
